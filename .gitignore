@@ -34,6 +34,6 @@ node_modules/
 
 
 # Excluir directorios específicos
-Test/private/
+Tests/Private/
 Demos/
 TestConsoleAnalyzeCode/
