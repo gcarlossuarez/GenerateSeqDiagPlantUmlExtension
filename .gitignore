@@ -1,0 +1,39 @@
+# Archivos de compilación y dependencias
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+*.log
+
+# Configuraciones de usuario
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Configuración específica de Rider y Visual Studio
+*.sln.ide
+*.cache/
+*.csproj.user
+
+# Archivos generados
+*.nupkg
+*.snupkg
+*.vs/
+
+# Dependencias de paquetes
+packages/
+node_modules/
+
+# Archivos temporales
+*.tmp
+*.bak
+
+
+# Excluir directorios específicos
+Test/private/
+Demos/
+TestConsoleAnalyzeCode/

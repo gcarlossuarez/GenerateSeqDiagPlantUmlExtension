@@ -1,0 +1,51 @@
+﻿' NOTA.- Para probar el código generado en la consola
+
+@startuml
+participant P1 as "Program"
+participant P2 as "Utiles"
+participant P3 as "xmlDocument"
+participant P4 as "long"
+participant P5 as "short"
+participant P6 as "int"
+participant P7 as "mtxcaServicePortTypeClient"
+participant P8 as "Console"
+participant P9 as "salir"
+loop Do-While: salir?.Trim().ToUpper() != "S"
+P1 -> P1: EjecutarProcesoConsultarCbte(3)
+P1 -> P2: GetValueInConfigFileDinamically("FullPathXmlRequest")
+P1 -> P3: Load(Utiles.Config.GetValueInConfigFileDinamically("FullPathXmlRequest"))
+P1 -> P3: GetElementsByTagName("Cuit")
+P1 -> P4: Parse(xmlDocument.GetElementsByTagName("Cuit")?[0].InnerText)
+P1 -> P3: GetElementsByTagName("Sign")
+P1 -> P3: GetElementsByTagName("Token")
+P1 -> P3: GetElementsByTagName("Cbte_tipo")
+P1 -> P5: Parse(xmlDocument.GetElementsByTagName("Cbte_tipo")?[0].InnerText)
+P1 -> P3: GetElementsByTagName("Punto_vta")
+P1 -> P6: Parse(xmlDocument.GetElementsByTagName("Punto_vta")?[0].InnerText)
+P1 -> P2: GetValueInConfigFileDinamically("EndpointConfigurationName")
+P1 -> P7: Open()
+P1 -> P7: consultarUltimoComprobanteAutorizado(authRequest, consultaUltimoComprobanteAutorizadoRequestType, out ConsoleAppTestAfip.MTXCA.CodigoDescripcionType[], arrayErrores, out ConsoleAppTestAfip.MTXCA.CodigoDescripcionType, evento)
+P1 -> P8: WriteLine(ultimoComp)
+alt ultimoComp < 0
+P1 -> P1: EjecutarProcesoConsultarCbte()
+end
+P1 -> P1: EjecutarProcesoConsultarCbte(1, "uno")
+P1 -> P8: WriteLine(x + a)
+P1 -> P1: EjecutarProcesoConsultarCbte(1, "uno")
+P1 -> P8: WriteLine(x + a)
+P1 -> P1: EjecutarProcesoConsultarCbte(1, "uno")
+P1 -> P8: WriteLine(x + a)
+P1 -> P1: EjecutarProcesoConsultarCbte(out int, gg, s)
+P1 -> P1: EjecutarProcesoConsultarCbte(out   g, s)
+P1 -> P8: WriteLine(x + a)
+P1 -> P1: EjecutarProcesoConsultarCbte(ref f, s)
+P1 -> P8: WriteLine(x + a)
+P1 -> P8: WriteLine(e)
+P1 -> P8: Write("Desea salir(S)?:")
+P1 -> P8: ReadLine()
+P1 -> P9: Trim()
+P1 -> P9: ToUpper()
+end
+P1 -> P8: Write("Pulse una tecla, para continuar...")
+P1 -> P8: ReadKey()
+@enduml
