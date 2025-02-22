@@ -38,13 +38,18 @@ namespace GenerateSeqDiagPlantUmlExtension
 
         [Category("Configuration")]
         [DisplayName("PlantUML Limit Size.")]
-        [Description("It's recommended a hig value due in the real life most of the methods ar complex.Default:8192")]
+        [Description("It's recommended a hig value due in the real life most of the methods ar complex. Default:8192")]
         public int PlantUmlLimitSize { get; set; } = 8192;
 
         [Category("Configuration")]
         [DisplayName("Dpi size.")]
-        [Description("It's recommended a hig value due in the real life most of the methods ar complex.Default:300")]
+        [Description("It's recommended a hig value due in the real life most of the methods ar complex. Default:300")]
         public int Dpi { get; set; } = 300;
+
+        [Category("Configuration")]
+        [DisplayName("Include Referenced Projects From Solution.")]
+        [Description("Recommended if you whish work with other projects referenced from Project's file contains Method selected (It can be heavy to mange). Default:false")]
+        public bool IncludeReferencedProjectsFromSolution { get; set; } = true;
     }
 
     public enum FormatPlantUmlOutputDiagram

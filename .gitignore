@@ -37,3 +37,4 @@ node_modules/
 Tests/Private/
 Demos/
 TestConsoleAnalyzeCode/
+GenerateSeqDiagPlantUmlExtension/Docs/Private/

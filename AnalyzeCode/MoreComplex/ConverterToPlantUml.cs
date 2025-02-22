@@ -39,7 +39,8 @@ namespace AnalyzeCode.MoreComplex
             {
                 ExtendedControlFlowSyntaxWalker.THROW_EXCEPTION_ARROW,
                 ExtendedControlFlowSyntaxWalker.DOUBLE_ARROW, 
-                ExtendedControlFlowSyntaxWalker.ARROW
+                ExtendedControlFlowSyntaxWalker.ARROW,
+                //ExtendedControlFlowSyntaxWalker.NOTE_OVER,
             };
             foreach (var call in walker.Actions)
             {
@@ -52,6 +53,12 @@ namespace AnalyzeCode.MoreComplex
                         var called = parts[1].Substring(0, parts[1].IndexOf(":", StringComparison.Ordinal)).Trim();
 
                         // Ensure that each participant has a unique alias
+
+                        //if (separators[i] == ExtendedControlFlowSyntaxWalker.NOTE_OVER)
+                        //{
+                        //    participantAliases[called] = $"P{participantId++}";
+                        //    continue;
+                        //}
                         if (!participantAliases.ContainsKey(caller))
                         {
                             participantAliases[caller] = $"P{participantId++}";

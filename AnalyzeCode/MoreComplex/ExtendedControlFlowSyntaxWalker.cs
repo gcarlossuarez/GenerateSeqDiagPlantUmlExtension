@@ -2,15 +2,20 @@
 using System.Data;
 using System.Linq;
 using System.Text;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace AnalyzeCode.MoreComplex
 {
+    using AnalyzeCode.Utils;
     using Microsoft.CodeAnalysis;
     using Microsoft.CodeAnalysis.CSharp;
     using Microsoft.CodeAnalysis.CSharp.Syntax;
     using System.Collections.Generic;
     using System.Diagnostics.Eventing.Reader;
+    using System.Linq.Expressions;
+    using System.Runtime.Remoting.Contexts;
     using System.Runtime.Remoting.Messaging;
+    using System.Xml.Linq;
 
     /// <summary>
     /// This diagram illustrates the flow of the ExtendedControlFlowSyntaxWalker class as it processes a C# syntax tree.
@@ -91,6 +96,9 @@ namespace AnalyzeCode.MoreComplex
             _invocationExpressionSyntaxesStack =
                 new Stack<Tuple<InvocationExpressionSyntax, string, MethodDeclarationSyntax>>();
 
+        private Stack<InvocationExpressionSyntax> _compoundInvocationExpressionSyntaxStacks =
+            new Stack<InvocationExpressionSyntax>();
+
         private Stack<Tuple<CatchClauseSyntax, string>> _rethrownExceptionsStack =
             new Stack<Tuple<CatchClauseSyntax, string>>();
 
@@ -125,6 +133,26 @@ namespace AnalyzeCode.MoreComplex
             _maxDept = maxDept;
         }
 
+        class MethodDeclarationContext
+        {
+            public readonly string CallerMethodDeclaration;
+            public string PreviousCaller;
+            public ExpressionSyntax LastExpressionSyntax;
+            public Stack<VisitedConditionalAccess> ConditionalAccessExpressionSyntaxStack;
+            public Stack<InvocationExpressionSyntax> InvocationsStack { get; } = new Stack<InvocationExpressionSyntax>();
+
+            public MethodDeclarationContext(string callerMethodDeclaration, string previousCaller)
+            {
+                CallerMethodDeclaration = callerMethodDeclaration;
+                PreviousCaller = previousCaller;
+                LastExpressionSyntax = null;
+                ConditionalAccessExpressionSyntaxStack = null;
+            }
+        }
+
+        private readonly Stack<MethodDeclarationContext> _methodDeclarationContextStack =
+            new Stack<MethodDeclarationContext>();
+
         /// <summary>
         /// Normally, all the process inits here.
         /// </summary>
@@ -135,22 +163,147 @@ namespace AnalyzeCode.MoreComplex
             var caller = GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1);
             DownloadStackAssignmentToActionListAndAssignCaller(caller: caller != UNKNOWN ? caller : string.Empty);
 
-            if(_initialMethodDeclarationSyntax == null) _initialMethodDeclarationSyntax = node;
-
-            //var methodName = node.Identifier.Text;
-            (string methodName, string parameters) = GetMethodSignature(node);
-            (int line, int column) = GetNodeLocation(node);
-            MethodSignature methodSignature = new MethodSignature(methodName, parameters, line, column);
-            if (_visitedMethods.Contains(methodSignature))
+            bool isInitialMethod = _initialMethodDeclarationSyntax == null;
+            if (_initialMethodDeclarationSyntax == null)
             {
-                // Avoid recursive calls that generate infinite loops
-                //return;
+                _initialMethodDeclarationSyntax = node;
+
+                // Get class where method is defined.
+                string className = string.Empty;
+                var classDeclaration = node.Parent as ClassDeclarationSyntax;
+                if (classDeclaration != null)
+                {
+                    className = classDeclaration.Identifier.ValueText;
+                }
+
+                // Get method name.
+                string methodName = node.Identifier.ValueText;
+                
+                List<string> parametersList = new List<string>();
+                // Obtener los parámetros del método
+                foreach (var parameter in node.ParameterList.Parameters)
+                {
+                    string parameterName = parameter.Identifier.ValueText;
+                    string parameterType = parameter.Type.ToString();
+                    string modifiers = string.Join(" ", parameter.Modifiers.Select(m => m.ValueText));
+                    
+                    parametersList.Add($"{modifiers} {parameterType} {parameterName}");
+                }
+
+                caller = className;
+                Actions.Add($"{ACTIVATE}{className}");
+                string methodSignature = methodName + "(" + string.Join(", ", parametersList) + ")";
+                string initialFlow = $"Actor {ARROW} {className} : {FormaterStr.DeleteEnterAndCarriageReturnCharacters(methodSignature)}";
+                Actions.Add(initialFlow);
             }
 
-            _visitedMethods.Add(methodSignature);
+            caller = FormaterStr.FormatStr(caller.Trim());
+
+            _methodDeclarationContextStack.Push(
+            new MethodDeclarationContext(callerMethodDeclaration:caller, previousCaller:caller)
+            );
+
+            //CallerMethodDeclaration = PreviousCaller = caller;
+
+            {
+                //var methodName = node.Identifier.Text;
+                (string methodName, string parameters) = GetMethodSignature(node);
+                (int line, int column) = GetNodeLocation(node);
+                MethodSignature methodSignature = new MethodSignature(methodName, parameters, line, column);
+                if (_visitedMethods.Contains(methodSignature))
+                {
+                    // Avoid recursive calls that generate infinite loops
+                    //return;
+                }
+
+                _visitedMethods.Add(methodSignature);
+            }
 
             // Base method is called to avoid interrupt the syntax Analisys
             base.VisitMethodDeclaration(node);
+
+            if(isInitialMethod) Actions.Add($"{DEACTIVATE}{caller}");
+
+            _methodDeclarationContextStack.Pop();
+        }
+
+
+        private string GetCalledFromExpressionSyntax(ExpressionSyntax expression)
+        {
+            string called = CalledFromExpression(expression);
+            return CalledFromExpressionSyntax(called);
+        }
+
+        private static string CalledFromExpressionSyntax(string called)
+        {
+            string[] partStrings = called.Split('.');
+            string previousCalled = partStrings.Length > 0 && !string.IsNullOrEmpty(partStrings[partStrings.Length - 1])
+                ? partStrings[partStrings.Length - 1]
+                : called;
+            return previousCalled.Replace("\"", "");
+        }
+
+        private string CalledFromExpression(ExpressionSyntax expression)
+        {
+            // Si la expresión es un acceso a miembro (como X.A o B().C)
+            if (expression is MemberAccessExpressionSyntax memberAccess)
+            {
+                // The caller is the left part of the expression
+                return memberAccess.Expression.ToString();
+            }
+
+            if (expression is MemberBindingExpressionSyntax memberBindingExpressionSyntax)
+            {
+                var a = memberBindingExpressionSyntax.Ancestors().OfType<ExpressionStatementSyntax>();
+                if (a.GetEnumerator() != null)
+                {
+                    if (a.Count() > 0 && a.First().Expression is ConditionalAccessExpressionSyntax conditionalAccessExpressionSyntax)
+                    {
+                        return conditionalAccessExpressionSyntax.Expression.ToFullString();
+                    }
+                }
+                return memberBindingExpressionSyntax.ToFullString();
+            }
+
+            if (expression is InvocationExpressionSyntax invocationExpressionSyntax)
+            {
+                string called = invocationExpressionSyntax.ToFullString().Trim();
+                if (called.Substring(0, 1) == "." && called.Length > 1)
+                {
+                    called = called.Substring(1);
+                }
+                string[] partStrings = called.Split('.');
+                string previousCalled = partStrings.Length > 0 && !string.IsNullOrEmpty(partStrings[0])
+                    ? partStrings[0]
+                    : called;
+                return previousCalled;
+            }
+
+            if (expression is ConditionalAccessExpressionSyntax conditionalAccessExpressionSyntax2)
+            {
+                return GetCaller(conditionalAccessExpressionSyntax2);
+            }
+
+            if (expression is IdentifierNameSyntax identifierNameSyntax)
+            {
+                return identifierNameSyntax.Identifier.Text;
+            }
+            // Si no hay un llamador explícito (por ejemplo, en una llamada directa como "Method()")
+            return null;
+        }
+
+        public List<(string Caller, string Invocation)> Invocations { get; } = new List<(string, string)>();
+
+
+        private class VisitedConditionalAccess
+        {
+            public ConditionalAccessExpressionSyntax ConditionalAccessExpressionSyntax;
+            //public List<ExpressionSyntax> InvocationExpressionSyntaxList = new List<ExpressionSyntax>();
+
+            public VisitedConditionalAccess(ConditionalAccessExpressionSyntax conditionalAccessExpressionSyntax)
+            {
+                ConditionalAccessExpressionSyntax = conditionalAccessExpressionSyntax;
+            }
         }
 
         /// <summary>
@@ -164,38 +317,336 @@ namespace AnalyzeCode.MoreComplex
             {
                 return;
             }
-            
+
             var methodDeclarationCurrentInvocation = HelperSyntaxWalker.GetMethodDeclarationSyntax(node, _compilation);
 
             if (IsRecursiveInfiniteCall(node, methodDeclarationCurrentInvocation)) return;
 
             ++_countDept;
 
-            // Determine caller
-            var caller = GetCaller(node);
+            RegisterStartOfInvocationBlock();
 
-            // Resolve the called class
-            var called = caller;  // Default to caller if no specific callee is detected
-            var methodCallee = GetMethodCalled(node, caller, ref called);
+            _methodDeclarationContextStack.Peek().InvocationsStack.Push(node);
+            //if (ConditionalAccessExpressionSyntaxStack.Any())
+            //{
+            //    ConditionalAccessExpressionSyntaxStack.Peek().InvocationExpressionSyntaxList.Add(node.Expression);
+            //}
+
+            // Llamar al método base para seguir visitando los nodos hijos
+            base.VisitInvocationExpression(node);
+
+            ProcessStackContent();
+
+            //////////////////////////////////////////////
             
+        }
+
+        private void RegisterStartOfInvocationBlock()
+        {
+            if (_methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack == null)
+            {
+                Console.WriteLine("================= START VISIT INVOCATION ==============================");
+                _methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack = new Stack<VisitedConditionalAccess>();
+            }
+        }
+
+        private void RegisterInvocationBlockCompletion()
+        {
+            if (_methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack != null &&
+                !_methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack.Any())
+            {
+                _methodDeclarationContextStack.Peek().PreviousCaller =
+                    _methodDeclarationContextStack.Peek().CallerMethodDeclaration;
+
+                _methodDeclarationContextStack.Peek().LastExpressionSyntax = null;
+                Console.WriteLine("================= END VISIT INVOCATION ==============================");
+                _methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack = null;
+            }
+        }
+
+        private void ProcessStackContent()
+        {
+            //if (_conditionalAccessExpressionSyntaxStack.Any()) return;
+
+            // Obtener el llamador (si existe)
+            string caller = string.Empty;
+            string called = string.Empty;
+            var invocationsArray = _methodDeclarationContextStack.Peek().InvocationsStack.ToArray();
+            InvocationExpressionSyntax previousNode = null;
+            for (int i = 0; i < invocationsArray.Count(); ++i)
+            {
+                InvocationExpressionSyntax currentNode = invocationsArray[i];
+
+                // Get the expression that is being invoked
+                ExpressionSyntax expression = currentNode.Expression;
+
+                // Note to take into account ==>
+                // In X(): Expression is X (an IdentifierNameSyntax).
+                // In X.A(): Expression is X.A (a MemberAccessExpressionSyntax).
+                // In X.A()?.C(): Expression is X.A()?.C (a mix of // ConditionalAccessExpressionSyntax and MemberBindingExpressionSyntax).
+                if (currentNode.Expression is IdentifierNameSyntax identifierNameSyntax1)
+                {
+                    caller = _methodDeclarationContextStack.Peek().PreviousCaller.Trim();
+                }
+                else if (previousNode == null && _methodDeclarationContextStack.Peek().LastExpressionSyntax != null)
+                {
+                    if (_methodDeclarationContextStack.Peek().LastExpressionSyntax is MemberAccessExpressionSyntax memberAccessExpressionSyntax &&
+                        memberAccessExpressionSyntax.Expression is IdentifierNameSyntax identifierNameSyntax &&
+                        _methodDeclarationContextStack.Peek().LastExpressionSyntax.ToFullString().StartsWith("."))
+                    {
+                        caller = identifierNameSyntax.Identifier.Text;
+                    }
+                    else if (_methodDeclarationContextStack.Peek().LastExpressionSyntax is MemberBindingExpressionSyntax memberBindingExpressionSyntax &&
+                             memberBindingExpressionSyntax.Name is IdentifierNameSyntax identifierNameSyntaxmemberBinding && 
+                             _methodDeclarationContextStack.Peek().LastExpressionSyntax.ToFullString().StartsWith("."))
+                    {
+                        //caller = identifierNameSyntaxmemberBinding.Identifier.Text;
+                        caller = identifierNameSyntaxmemberBinding.Ancestors().OfType<InvocationExpressionSyntax>().FirstOrDefault()?.ToFullString();
+                    }
+                    else if(_methodDeclarationContextStack.Peek().LastExpressionSyntax is MemberAccessExpressionSyntax memberAccessExpressionSyntax2)
+                    {
+                        caller = memberAccessExpressionSyntax2.Parent.ToFullString().Trim();
+                        string[] parts = caller?.Split('.');
+                        caller = parts?.Length > 0 && !string.IsNullOrEmpty(parts[parts.Length - 1])
+                            ? parts[parts.Length - 1]
+                            : caller;
+                    }
+                    else
+                    {
+                        caller = _methodDeclarationContextStack.Peek().LastExpressionSyntax.ToFullString().Trim();
+                    }
+
+                    caller = caller.Trim();
+                    if (caller.StartsWith("."))
+                    {
+                        caller = caller.Substring((1));
+                    }
+                }
+                else if (previousNode == null && !(currentNode.Parent is ConditionalAccessExpressionSyntax))
+                {
+                    caller = GetCallerFromExpressionSyntax(expression);
+                }
+                else if (previousNode == null && currentNode.Parent is ConditionalAccessExpressionSyntax conditionalAccessExpressionSyntax)
+                {
+                    caller = conditionalAccessExpressionSyntax.Parent.DescendantNodes().OfType<IdentifierNameSyntax>().FirstOrDefault()?.Identifier.Text;
+                }
+                else if (previousNode != null)
+                {
+                    caller = previousNode.ToFullString();
+                }
+                else
+                {
+                    caller = UNKNOWN;
+                }
+
+                caller = caller?.Trim().Replace("\"", "'");
+                caller = FormaterStr.FormatStr(caller, true);
+
+                string[] partStrings = currentNode?.ToFullString().Split('.');
+                string method = partStrings?.Length > 0 && !string.IsNullOrEmpty(partStrings[partStrings.Length - 1])
+                    ? partStrings[partStrings.Length - 1]
+                    : currentNode?.ToFullString();
+                //method = DeleteEnterAndCarriageReturnCharacters(method?.Trim().Replace("\"", "'"), true);
+
+                (string methodName, string parameters, List<TypeInfo> argumentsTypeInfo) = GetMethodSignature(currentNode);
+                var argumentList = GetArgumentsListStringBuilder(currentNode, argumentsTypeInfo).ToString();
+                string methodCallWithArguments = $"{methodName}({argumentList})";
+                methodCallWithArguments =
+                    FormaterStr.FormatStr(methodCallWithArguments, truncanteLongLine:true);
+                
+                methodCallWithArguments = $"{methodCallWithArguments}";
+                //if (string.IsNullOrEmpty(called))
+                //{
+                //    called = caller;
+                //}
+                //else
+                {
+                    partStrings = caller?.Split('.');
+                    called = partStrings.Length > 0 ? partStrings[partStrings.Length - 1] : caller; // Si no tiene algo antes del punto, es un método de clase actual
+                }
+
+                called = FormaterStr.FormatStr(called.Trim(), truncanteLongLine:true);
+
+                //if (currentNode.Expression is ConditionalAccessExpressionSyntax conditionalAccessExpressionSyntax2)
+                //{
+                //    method = "?." + method;
+                //}
+                //string statement = $"{_methodDeclarationContextStack.Peek().PreviousCaller} --> {called}:{method}";
+                string statement = $"{_methodDeclarationContextStack.Peek().PreviousCaller} {ARROW} {called}:{methodCallWithArguments}";
+                Console.WriteLine(statement);
+
+                ProcessInvocation(_methodDeclarationContextStack.Peek().PreviousCaller, called, statement, currentNode);
+
+                previousNode = invocationsArray[i];
+                
+                _methodDeclarationContextStack.Peek().PreviousCaller = called;
+                //called = method;
+
+                if (_methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack.Any())
+                {
+                    _methodDeclarationContextStack.Peek().LastExpressionSyntax = expression;
+                }
+
+            }
+
+            while (_methodDeclarationContextStack.Peek().InvocationsStack.Any())
+            {
+                _methodDeclarationContextStack.Peek().InvocationsStack.Pop();
+            }
+
+            RegisterInvocationBlockCompletion();
+        }
+
+        private string GetCallerFromExpressionSyntax(ExpressionSyntax expression)
+        {
+            // If the expression is a member access (such as X.A or B().C)
+            if (expression is MemberAccessExpressionSyntax memberAccess)
+            {
+                // The caller is the left part of the expression
+                return memberAccess.Expression.ToString();
+            }
+
+            if (expression is MemberBindingExpressionSyntax memberBindingExpressionSyntax)
+            {
+                {
+                    var ancestors = memberBindingExpressionSyntax.Ancestors().OfType<ExpressionStatementSyntax>();
+                    var first = ancestors.FirstOrDefault();
+                    if (first != null)
+                    {
+                        if (first.Expression is ConditionalAccessExpressionSyntax conditionalAccessExpressionSyntax)
+                        {
+                            if (conditionalAccessExpressionSyntax.Parent is ConditionalAccessExpressionSyntax conditionalAccessExpressionSyntax2)
+                            {
+
+                            }
+                            if (conditionalAccessExpressionSyntax.Expression is ConditionalAccessExpressionSyntax conditionalAccessExpressionSyntax3)
+                            {
+                                var d = conditionalAccessExpressionSyntax.DescendantNodes().OfType<InvocationExpressionSyntax>();
+                                var d1 = conditionalAccessExpressionSyntax.DescendantNodes().OfType<MemberAccessExpressionSyntax>();
+                                var d2 = conditionalAccessExpressionSyntax.DescendantNodes();
+                                return conditionalAccessExpressionSyntax.Expression.ToFullString();
+                            }
+                            var ancestorsFirst = first.Ancestors();
+                            var descendants = conditionalAccessExpressionSyntax.WhenNotNull.DescendantNodes();
+                            return conditionalAccessExpressionSyntax.Expression.ToFullString();
+                        }
+                    }
+                    else
+                    {
+                        var conditionalAccessExpressionSyntax = memberBindingExpressionSyntax.Ancestors().OfType<ConditionalAccessExpressionSyntax>().FirstOrDefault();
+                        return conditionalAccessExpressionSyntax?.Expression.ToFullString();
+                    }
+                }
+
+                return memberBindingExpressionSyntax.Ancestors().OfType<ExpressionStatementSyntax>().FirstOrDefault()?.ToFullString();
+            }
+
+            if (expression is InvocationExpressionSyntax)
+            {
+                return expression.ToFullString();
+            }
+
+            if (expression is IdentifierNameSyntax identifierNameSyntax)
+            {
+                return identifierNameSyntax.Identifier.Text;
+            }
+            // Si no hay un llamador explícito (por ejemplo, en una llamada directa como "Method()")
+            return null;
+        }
+
+        private bool IsPartOfCompositeInvocation(InvocationExpressionSyntax node)
+        {
+            // 1. Review up: Is parent an invocation or conditional access?
+            SyntaxNode parent = node.Parent;
+            while (parent != null)
+            {
+                if (parent is InvocationExpressionSyntax || parent is ConditionalAccessExpressionSyntax)
+                {
+                    return true; // It is nested in a compound invocationa
+                }
+                parent = parent.Parent;
+            }
+
+            // 2. Review down: Is the invoked expression complex?
+            var expression = node.Expression;
+            if (expression is InvocationExpressionSyntax ||
+                expression is ConditionalAccessExpressionSyntax ||
+                (expression is MemberAccessExpressionSyntax memberAccess &&
+                 (memberAccess.Expression is InvocationExpressionSyntax ||
+                  memberAccess.Expression is ConditionalAccessExpressionSyntax)))
+            {
+                return true; // Depends on an invocation or conditional access
+            }
+
+            return false; // It is not in a compound chain
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="caller"></param>
+        /// <param name="called"></param>
+        /// <param name="statement"></param>
+        /// <param name="node"></param>
+        /// <returns name="_invocationExpressionSyntaxesStack">Global _invocationExpressionSyntaxesStack.Pop();</returns>
+        /// <returns name="_countDept">Global --_countDept;</returns>
+        private void ProcessInvocation(string caller, string called, string statement, InvocationExpressionSyntax node)
+        {
             // Download all the assignments in Stack to Actions list and assign the new caller.
             DownloadStackAssignmentToActionListAndAssignCaller(caller);
 
-            (string methodName, string parameters, List<TypeInfo> argumentsTypeInfo) = GetMethodSignature(node);
-            (int line, int column) = GetNodeLocation(node);
-            MethodSignature methodSignature = new MethodSignature(methodName, parameters, line, column);
-            if (_visitedMethods.Contains(methodSignature))
-            {
-                //
-            }
-
-            _visitedMethods.Add(methodSignature);
+            
+            var methodDeclarationCurrentInvocation = HelperSyntaxWalker.GetMethodDeclarationSyntax(node, _compilation);
 
             _invocationExpressionSyntaxesStack.Push(Tuple.Create(node, called, methodDeclarationCurrentInvocation));
 
-            //// Base method is called to avoid interrupt the syntax Analysis
-            //base.VisitInvocationExpression(node);
+            Actions.Add(statement);
+            Actions.Add($"{ACTIVATE}{called}");
 
+            // Resolve the called method
+            // NOTE. - See (1*) Set the arguments of the method call)
+            if (methodDeclarationCurrentInvocation != null)
+            {
+                Visit(methodDeclarationCurrentInvocation);
+            }
+
+            Actions.Add($"{DEACTIVATE}{called}");
+
+            // Download all the assignments in Stack to Actions list.
+            DownloadStackAssignmentToActionListAndAssignCaller(caller);
+
+            _invocationExpressionSyntaxesStack.Pop();
+
+            --_countDept;
+        }
+
+
+        public override void VisitConditionalAccessExpression(ConditionalAccessExpressionSyntax node)
+        {
+            RegisterStartOfInvocationBlock();
+
+            _methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack.Push(new VisitedConditionalAccess(node));
+
+            base.VisitConditionalAccessExpression(node);
+
+            _methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack?.Pop();
+
+            ProcessStackContent();
+
+            if (_methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack != null)
+            {
+                while (_methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack.Any() &&
+                       _methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack.Peek().ConditionalAccessExpressionSyntax == node)
+                {
+                    _methodDeclarationContextStack.Peek().ConditionalAccessExpressionSyntaxStack.Pop();
+                }
+            }
+
+            RegisterInvocationBlockCompletion();
+        }
+
+        private static StringBuilder GetArgumentsListStringBuilder(InvocationExpressionSyntax node, List<TypeInfo> argumentsTypeInfo)
+        {
             var argumentList = new StringBuilder();
 
             // (1*) Set the arguments of the method call
@@ -217,28 +668,252 @@ namespace AnalyzeCode.MoreComplex
                 argumentList.Remove(argumentList.Length - 2, 2); // Artifice to avoid problems
             }
 
-            var methodCallWithArguments = $"{caller} {ARROW} {called}: {methodCallee}({DeleteEnterAndCarriageReturnCharacters(argumentList.ToString())})";
-            Actions.Add(methodCallWithArguments);
-            Actions.Add($"{ACTIVATE}{called}");
+            return argumentList;
+        }
 
-            // Base method is called to avoid interrupt the Syntax Analisys
-            base.VisitInvocationExpression(node);
+        /// <summary>
+        /// Check if the current node is part of a compound invocation.
+        /// </summary>
+        /// <param name="node"></param>
+        /// <returns></returns>
+        public bool ItIsCompoundInvocation(Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax node, out string newCalled)
+        {
+            newCalled = string.Empty;
+            //var originalNode = node; // Keep the original reference.
+            //var current = node.Parent; // We start from the parent so as not to lose node
 
-            // Resolve the called method
-            // NOTE. - See (1*) Set the arguments of the method call)
-            if (methodDeclarationCurrentInvocation != null)
+            //int count = 0;
+            //bool founded;
+            //do
+            //{
+            //    founded = false;
+            //    if (current is MemberAccessExpressionSyntax memberAccessExpressionSyntax)
+            //    {
+            //        founded = GoUp();
+            //    }
+            //    else if (current is ConditionalAccessExpressionSyntax conditionalAccessExpressionSyntax)
+            //    {
+            //        founded = GoUp();
+            //    }
+            //    //else if(current is InvocationExpressionSyntax)
+            //    //{
+            //    //    founded = GoUp();
+            //    //}
+
+            //    if (founded) ++count;
+            //} while (founded);
+
+            //return count > 1;
+            //// If the original node is not the outermost node, it is a compound invocation
+            ////return current != originalNode.Parent;
+
+            int count = 0;
+            bool founded = false;
+            var ancestors = node.Ancestors();
+            var descendants = node.DescendantNodes();
+            foreach (var syntaxNode in descendants)
             {
-                Visit(methodDeclarationCurrentInvocation);
+                if (syntaxNode is MemberAccessExpressionSyntax memberAccessExpressionSyntax)
+                {
+                    ++count;
+                    founded = true;
+                }
+                else if (node.Expression is MemberBindingExpressionSyntax memberBindingExpressionSyntax)
+                {
+                    ++count;
+                    founded = true;
+                }
+                else if (syntaxNode is ConditionalAccessExpressionSyntax conditionalAccessExpressionSyntax)
+                {
+                    ++count;
+                    founded = true;
+                }
+                else if (syntaxNode is InvocationExpressionSyntax invocationExpressionSyntax)
+                {
+                    ++count;
+                    founded = true;
+                }
+                else
+                {
+                    break;
+                }
+                //if (founded) break;
             }
-            
-            Actions.Add($"{DEACTIVATE}{called}");
 
-            // Download all the assignments in Stack to Actions list.
-            DownloadStackAssignmentToActionListAndAssignCaller(caller);
+            foreach (var syntaxNode in ancestors)
+            {
+                if (syntaxNode is MemberAccessExpressionSyntax memberAccessExpressionSyntax)
+                {
+                    //++count;
+                    //founded = true;
+                }
+                else if (node.Expression is MemberBindingExpressionSyntax memberBindingExpressionSyntax)
+                {
+                    //++count;
+                    //founded = true;
+                }
+                else if (syntaxNode is ConditionalAccessExpressionSyntax conditionalAccessExpressionSyntax)
+                {
+                    //++count;
+                    //founded = true;
+                }
+                else if (syntaxNode is InvocationExpressionSyntax invocationExpressionSyntax)
+                {
+                    //++count;
+                    string[] parts = syntaxNode.ToFullString().Split('.');
+                    newCalled = parts[parts.Length - 1];
+                    break;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            //var current = node.Parent; // We start from the parent so as not to lose node
+            //if (node.Expression is MemberBindingExpressionSyntax memberBindingExpressionSyntax)
+            //{
+            //    current = memberBindingExpressionSyntax;
+            //}
+            //else if (node.Expression is MemberAccessExpressionSyntax memberAccessExpressionSyntax)
+            //{
+            //    current = memberAccessExpressionSyntax;
+            //}
+            //else
+            //{
+            //    return false;
+            //}
 
-            _invocationExpressionSyntaxesStack.Pop();
+            //do
+            //{
 
-            --_countDept;
+            //    founded = false;
+            //    var xx = current?.Ancestors()
+            //            .FirstOrDefault(
+            //                x => x is MemberBindingExpressionSyntax ||
+            //                     x is MemberAccessExpressionSyntax);
+            //    if (xx != null)
+            //    {
+
+            //        if (
+            //            (xx is MemberBindingExpressionSyntax memberBindingExpressionSyntax2 && memberBindingExpressionSyntax2 is InvocationExpressionSyntax invocation) ||
+            //           xx is ConditionalAccessExpressionSyntax conditionalAccessExpression))
+            //        {
+
+            //        }
+            //    }
+            //    if (current != null)
+            //    {
+            //        ++count;
+            //        founded = true;
+            //    }
+            //    //if (current is MemberBindingExpressionSyntax memberBindingExpressionSyntax)
+            //    //{
+            //    //    current = memberBindingExpressionSyntax.Ancestors()
+            //    //        .FirstOrDefault(
+            //    //            x => x is Microsoft.CodeAnalysis.CSharp.Syntax.ConditionalAccessExpressionSyntax);
+            //    //}
+            //    //else if (current is MemberAccessExpressionSyntax memberAccessExpressionSyntax)
+            //    //{
+            //    //    var yy = memberAccessExpressionSyntax.Parent;
+            //    //    current = memberAccessExpressionSyntax.Ancestors()
+            //    //        .FirstOrDefault(x => x is ConditionalAccessExpressionSyntax);
+            //    //}
+
+            //    //founded = false;
+            //    //if (current != null)
+            //    //{
+            //    //    var xx = current.Ancestors().OfType<ConditionalAccessExpressionSyntax>().FirstOrDefault();
+            //    //    if (xx != null && xx.Expression is InvocationExpressionSyntax invocation)
+            //    //    {
+            //    //        founded = true;
+            //    //        current = xx;
+            //    //    }
+            //    //    else
+            //    //    {
+            //    //        if (xx != null &&
+            //    //            xx is ConditionalAccessExpressionSyntax conditionalAccessExpression)
+            //    //        {
+            //    //            founded = true;
+            //    //            if (conditionalAccessExpression.Expression is IdentifierNameSyntax
+            //    //                identifierNameSyntax)
+            //    //            {
+            //    //                break;
+            //    //            }
+            //    //        }
+
+            //    //        current = null;
+            //    //    }
+            //    //}
+            //} while (founded);
+
+            //////////////////////////////////
+            //if (current is MemberBindingExpressionSyntax memberBindingExpressionSyntax)
+            //{
+            //    current = memberBindingExpressionSyntax.Ancestors()
+            //        .FirstOrDefault(
+            //            x => x is Microsoft.CodeAnalysis.CSharp.Syntax.ConditionalAccessExpressionSyntax); // ||
+            //                 //x is Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax);
+            //    founded = AnalizeFoundedSyntaxNode(current, ref count);
+            //}
+            //else if (current is MemberAccessExpressionSyntax memberAccessExpressionSyntax)
+            //{
+            //    current = memberAccessExpressionSyntax.Ancestors()
+            //        .FirstOrDefault(x => x is ConditionalAccessExpressionSyntax); // ||
+            //                             //x is Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax);
+            //    founded = AnalizeFoundedSyntaxNode(current, ref count);
+            //}
+            //} while (founded);
+            return count > 1;
+
+            //bool AnalizeFoundedSyntaxNode(SyntaxNode syntaxNode, ref int count1)
+            //{
+            //    if (syntaxNode != null)
+            //    {
+            //        ++count1;
+            //        return true;
+
+            //    }
+
+            //    return false;
+            //}
+
+            //bool GoUp()
+            //{
+            //    founded = true;
+            //    current = current.Parent; // Go up to the next level
+            //    return founded;
+            //}
+        }
+
+
+
+        /// <summary>
+        /// Gets the returning data type. Called when the visitor visits a InvocationExpressionSyntax node.
+        /// </summary>
+        /// <param name="node"></param>
+        /// <returns></returns>
+        private string GetReturningDataType(InvocationExpressionSyntax node)
+        {
+            // Get the SemanticModel from the Compilation.
+            var syntaxTree = node.SyntaxTree;
+            var semanticModel = _compilation.GetSemanticModel(syntaxTree);
+
+            // Get the semantic information of the node
+            var symbolInfo = semanticModel.GetSymbolInfo(node);
+
+            if (symbolInfo.Symbol is IMethodSymbol methodSymbol)
+            {
+                var returnType = methodSymbol.ReturnType;
+
+                if (returnType.SpecialType == SpecialType.System_Void)
+                {
+                    return string.Empty; // No return type
+                }
+                
+                return returnType.ToString();
+            }
+
+            return UNRESOLVED;
         }
 
         /// <summary>
@@ -545,6 +1220,8 @@ namespace AnalyzeCode.MoreComplex
         private string GetMethodCalled(Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax node,
             string caller, ref string called)
         {
+            //string invocatorSeparation = node.Expression.ToString().Contains("?.") ? "?." : ".";
+            //var expressionParts = node.Expression.ToString().Split(invocatorSeparation.ToCharArray());
             var expressionParts = node.Expression.ToString().Split('.');
 
             if (expressionParts.Length == 1)
@@ -565,11 +1242,16 @@ namespace AnalyzeCode.MoreComplex
         /// <returns></returns>
         private string GetCallerFromExpression(InvocationExpressionSyntax node, string caller)
         {
+            //string invocatorSeparation = node.Expression.ToString().Contains("?.") ? "?." : ".";
+            //var expressionParts = node.Expression.ToString().Split(invocatorSeparation.ToCharArray());
             var expressionParts = node.Expression.ToString().Split('.');
-            var firstPart = expressionParts[0];
+
+            var firstPart = expressionParts.Length > 2
+                ? expressionParts[expressionParts.Length - 2].Replace("\"", "")
+                : expressionParts[0];
             if (firstPart.Trim().Length == 0)
             {
-                firstPart = ResolveFirstPart(node, firstPart);
+                firstPart = ResolveFirstPart(node, firstPart, caller);
             }
 
             return (firstPart == "this" || firstPart == "base") ? caller : firstPart;
@@ -581,8 +1263,10 @@ namespace AnalyzeCode.MoreComplex
         /// </summary>
         /// <param name="node"></param>
         /// <param name="firstPart"></param>
+        /// <param name="caller"></param>
         /// <returns></returns>
-        private string ResolveFirstPart(Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax node, string firstPart)
+        private string ResolveFirstPart(Microsoft.CodeAnalysis.CSharp.Syntax.InvocationExpressionSyntax node,
+            string firstPart, string caller)
         {
             if (node.Expression is MemberBindingExpressionSyntax memberBindingExpressionSyntax)
             {
@@ -593,7 +1277,43 @@ namespace AnalyzeCode.MoreComplex
                     string[] arrExpression = expression.Split('.');
                     if (arrExpression.Length > 1)
                     {
-                        firstPart = arrExpression[0].Substring(0, arrExpression[0].Length - 1);
+                        if (arrExpression[0].Trim().Length == 0)
+                        {
+                            var x = syntaxNode;
+                            do
+                            {
+                                var xx = x?.Ancestors().OfType<ConditionalAccessExpressionSyntax>().FirstOrDefault();
+                                if (xx != null && xx.Expression is InvocationExpressionSyntax invocation)
+                                {
+                                    x = xx;
+                                    string aux = String.Empty;
+                                    var m = GetMethodCalled(invocation,  aux, ref firstPart);
+                                }
+                                else
+                                {
+                                    if (xx != null &&
+                                        xx is ConditionalAccessExpressionSyntax conditionalAccessExpression)
+                                    {
+                                        if (conditionalAccessExpression.Expression is IdentifierNameSyntax
+                                            identifierNameSyntax)
+                                        {
+                                            firstPart = identifierNameSyntax.Identifier.Text;
+                                            //firstPart = $"temp{GetReturningDataType(node)}";
+                                            break;
+                                        }
+                                    }
+                                    x = null;
+                                }
+                            } while (x != null && string.IsNullOrEmpty(firstPart));
+                            if (string.IsNullOrEmpty(firstPart))
+                            {
+                                firstPart = UNKNOWN;
+                            }
+                        }
+                        else
+                        {
+                            firstPart = ResolveFirstPart(arrExpression, ref caller);
+                        }
                     }
 
                     break;
@@ -608,7 +1328,7 @@ namespace AnalyzeCode.MoreComplex
                     string[] arrExpression = expression.Split('.');
                     if (arrExpression.Length > 1)
                     {
-                        firstPart = arrExpression[0].Substring(0, arrExpression[0].Length - 1);
+                        firstPart = ResolveFirstPart(arrExpression, ref caller);
                     }
 
                     break;
@@ -618,13 +1338,39 @@ namespace AnalyzeCode.MoreComplex
             return firstPart;
         }
 
+        /// <summary>
+        /// Process the expression, resolving the first part from array.
+        /// </summary>
+        /// <param name="expressionArray"></param>
+        /// <param name="caller"></param>
+        /// <returns></returns>
+        private static string ResolveFirstPart(string[] expressionArray, ref string caller)
+        {
+            //string firstPart;
+            //int pos = expressionArray[0].Substring(expressionArray[0].Length - 1) == "?" ? 1 : 0;
+            //firstPart = expressionArray[0].Substring(0, expressionArray[0].Length - pos);
+            string firstPart = expressionArray.Length > 2
+                ? expressionArray[expressionArray.Length - 2].Replace("\"", "")
+                : expressionArray[0];
+            if (expressionArray.Length > 2)
+            {
+                caller = expressionArray[expressionArray.Length - 3].Replace("\"", "");
+            }
+            return firstPart;
+        }
+
+        /// <summary>
+        /// Called when the visitor visits a IfStatementSyntax node.
+        /// </summary>
+        /// <param name="node"></param>
         public override void VisitIfStatement(IfStatementSyntax node)
         {
             // Download all the assignments in Stack to Actions list.
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            Actions.Add($"{ALT} {DeleteEnterAndCarriageReturnCharacters(node.Condition.ToString())}"); // Marcar inicio del bloque 'if'
+            string formattedCondition = FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Condition.ToString());
+            Actions.Add($"{ALT} {formattedCondition}"); // Marcar inicio del bloque 'if'
 
             // Visitar el bloque 'then'
             Visit(node.Statement);
@@ -634,7 +1380,7 @@ namespace AnalyzeCode.MoreComplex
 
             if (node.Else != null)
             {
-                Actions.Add("else"); // Marcar inicio del bloque 'else'
+                Actions.Add($"else Not ({formattedCondition})"); // Marcar inicio del bloque 'else'
 
                 // Visitar el bloque 'else'
                 Visit(node.Else.Statement);
@@ -714,7 +1460,7 @@ namespace AnalyzeCode.MoreComplex
         public override void VisitPrefixUnaryExpression(PrefixUnaryExpressionSyntax node)
         {
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            string assignment = $"{DeleteEnterAndCarriageReturnCharacters(node.ToFullString().Trim())}";
+            string assignment = $"{FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.ToFullString().Trim())}";
 
             //var ancestors = node.Ancestors().ToArray();
             if (VisitNode(node))
@@ -746,13 +1492,21 @@ namespace AnalyzeCode.MoreComplex
                 }
                 else if (visitedNode is LocalDeclarationStatementSyntax localDeclarationStatementSyntax)
                 {
+                    bool founded = false;
                     foreach (var v in localDeclarationStatementSyntax.Declaration.Variables)
                     {
-                        if (v.Initializer.Value == node)
+                        if (v.Initializer?.Value == node)
                         {
+                            founded = true;
                             visitNode = false;
                             break;
                         }
+                    }
+
+                    if (!founded)
+                    {
+                        // To avoid infinite calls
+                        //visitNode = false;
                     }
                 }
                 else if (visitedNode is AssignmentExpressionSyntax assignmentExpressionSyntax)
@@ -856,7 +1610,7 @@ namespace AnalyzeCode.MoreComplex
             //string variable = node.Operand.ToString(); // La variable afectada
 
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            string assignment = $"{DeleteEnterAndCarriageReturnCharacters(node.ToFullString().Trim())}";
+            string assignment = $"{FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.ToFullString().Trim())}";
 
             if(VisitNode(node)) ProcessVisitAssignmentExpression(node, assignment);
 
@@ -1011,7 +1765,7 @@ namespace AnalyzeCode.MoreComplex
             }
 
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            string str = DeleteEnterAndCarriageReturnCharacters(assignment, allocatingOnStack:true);
+            string str = FormaterStr.DeleteEnterAndCarriageReturnCharacters(assignment, allocatingOnStack:true);
             string[] parts = str.Split('\n');
             foreach(var s in parts)
             {
@@ -1032,14 +1786,15 @@ namespace AnalyzeCode.MoreComplex
             //    //
             //}
 
-            var caller = GetCaller(node); // GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1);
+            //var caller = GetCaller(node);
+            var caller = GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1);
             if (caller != _asignmentInfoStack.Caller)
             {
                 DownloadStackAssignmentToActionListAndAssignCaller(caller);
             }
             
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            string str = DeleteEnterAndCarriageReturnCharacters(node.ToFullString(), allocatingOnStack: true);
+            string str = FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.ToFullString(), allocatingOnStack: true);
             string[] parts = str.Split('\n');
             foreach (var s in parts)
             {
@@ -1059,7 +1814,13 @@ namespace AnalyzeCode.MoreComplex
             if (_asignmentInfoStack.StackAsignment.Count > 0 && !string.IsNullOrEmpty(_asignmentInfoStack.Caller))
             {
                 string strAssignments = $"{NOTE_OVER}" + _asignmentInfoStack.Caller + " : " +
-                                        string.Join("\\n", _asignmentInfoStack.StackAsignment.Reverse());
+                                        string.Join("\\n", _asignmentInfoStack.StackAsignment.Reverse().Select(x=> x.Trim()));
+                int lineLimit = 100;
+                string final = "...\\n";
+                if (strAssignments.Length > lineLimit)
+                {
+                    strAssignments = strAssignments.Substring(0, lineLimit - final.Length) + final;
+                }
                 Actions.Add(strAssignments);
             }
             _asignmentInfoStack.StackAsignment.Clear();
@@ -1106,11 +1867,11 @@ namespace AnalyzeCode.MoreComplex
                 if (caseLabel != null)
                 {
                     var caseValue = caseLabel.Value.ToString();
-                    Actions.Add($"{ALT_CASE} " + DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == " + caseValue));
+                    Actions.Add($"{ALT_CASE} " + FormaterStr.DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == " + caseValue));
                 }
                 else
                 {
-                    Actions.Add($"{ALT_CASE} " + DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == default"));
+                    Actions.Add($"{ALT_CASE} " + FormaterStr.DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == default"));
                 }
                 switchStatementInfo.FirstCaseStatement = false;
             }
@@ -1120,7 +1881,7 @@ namespace AnalyzeCode.MoreComplex
                 if (caseLabel != null)
                 {
                     var caseValue = caseLabel.Value.ToString();
-                    Actions.Add("else case " + DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == " + caseValue));
+                    Actions.Add("else case " + FormaterStr.DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == " + caseValue));
                 }
                 else
                 {
@@ -1143,7 +1904,7 @@ namespace AnalyzeCode.MoreComplex
 
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
             Actions.Add("loop For:" + node.Declaration + "; " +
-                        DeleteEnterAndCarriageReturnCharacters(node.Condition.ToString()) + " ; " + node.Incrementors);
+                        FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Condition.ToString()) + " ; " + node.Incrementors);
 
             AddNoteToVisited(node);
 
@@ -1196,12 +1957,11 @@ namespace AnalyzeCode.MoreComplex
             
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
             Actions.Add(
-                $"{classAndMethodNodeBelongs.Item1} {DOUBLE_ARROW} {caller} : return {DeleteEnterAndCarriageReturnCharacters(node.Expression != null ? node.Expression.ToFullString() : string.Empty)}");
+                $"{classAndMethodNodeBelongs.Item1} {DOUBLE_ARROW} {caller} : return {FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Expression != null ? node.Expression.ToFullString() : string.Empty)}");
             
             base.VisitReturnStatement(node);
         }
 
-        /// <summary>
         /// <summary>
         /// Gets the name of the class that calls the method to which a given node belongs.
         /// </summary>
@@ -1222,9 +1982,13 @@ namespace AnalyzeCode.MoreComplex
                     ? ancestors[ancestors.Length - positionAncestorAnalyzed].Item2
                     : GetCaller(node);
             }
-            
+
             // Is the root method. The first called. We don´t know who is the caller either the instance name.
-            return GetCaller(node);
+            var caller = _methodDeclarationContextStack?.Count() > 0
+                ? _methodDeclarationContextStack.Peek().PreviousCaller
+                : GetCaller(node);
+            
+            return caller;;
         }
 
         /// <summary>
@@ -1297,7 +2061,7 @@ namespace AnalyzeCode.MoreComplex
 
             string condition = node.Condition.ToString(); //ProcessExpression(node.Condition);
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            Actions.Add($"loop While: {DeleteEnterAndCarriageReturnCharacters(condition)}");
+            Actions.Add($"loop While: {FormaterStr.DeleteEnterAndCarriageReturnCharacters(condition)}");
 
             // Base method is called to avoid interrupt the syntax Analisys
             base.VisitWhileStatement(node);
@@ -1333,7 +2097,8 @@ namespace AnalyzeCode.MoreComplex
                     {
                         string expressionPart = ProcessExpression(conditionalAccess.Expression);
                         string whenNotNull = ProcessExpression(conditionalAccess.WhenNotNull);
-                        return $"{expressionPart}?{whenNotNull}";
+                        return $"{expressionPart}{whenNotNull}";
+                        //return $"{expressionPart}?{whenNotNull}";
                     }
                 case MemberBindingExpressionSyntax memberBinding:
                     {
@@ -1391,7 +2156,7 @@ namespace AnalyzeCode.MoreComplex
 
             string condition = node.Condition.ToString();// ProcessExpression(node.Condition);
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            Actions.Add($"loop Do-While: {DeleteEnterAndCarriageReturnCharacters(condition)}");
+            Actions.Add($"loop Do-While: {FormaterStr.DeleteEnterAndCarriageReturnCharacters(condition)}");
 
             // Base method is called to avoid interrupt the syntax Analisys
             base.VisitDoStatement(node);
@@ -1409,7 +2174,7 @@ namespace AnalyzeCode.MoreComplex
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            Actions.Add($"loop Foreach: {DeleteEnterAndCarriageReturnCharacters(node.Expression.ToString())}");
+            Actions.Add($"loop Foreach: {FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Expression.ToString())}");
 
             // Base method is called to avoid interrupt the syntax Analisys
             base.VisitForEachStatement(node);
@@ -1418,66 +2183,6 @@ namespace AnalyzeCode.MoreComplex
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
             Actions.Add("end");
-        }
-
-        /// <summary>
-        /// Delete Enter and Carriage Return characters from a string.
-        /// </summary>
-        /// <param name="str"></param>
-        /// <param name="allocatingOnStack"></param>
-        /// <returns></returns>
-        private string DeleteEnterAndCarriageReturnCharacters(string str, bool allocatingOnStack = false)
-        {
-            const int NULL_POSITION = -1;
-            int position = NULL_POSITION;
-            List<Tuple<int, int>> listPositions = new List<Tuple<int, int>>();
-            if (allocatingOnStack)
-            {
-                position = str.IndexOf("//", StringComparison.Ordinal);
-                char[] arr = str.ToCharArray();
-                while (NULL_POSITION != position && position < arr.Length)
-                {
-                    int i = position;
-                    while (i < arr.Length && arr[i] != '\n')
-                    {
-                        ++i;
-                    }
-
-                    if (i < str.Length)
-                    {
-                        listPositions.Add(Tuple.Create(position, i));
-                        position = str.IndexOf("//", position + 1, StringComparison.Ordinal);
-                    }
-                }
-
-                for (int j = 0; j < arr.Length; ++j)
-                {
-                    if ((arr[j] == '\n' || arr[j] == '\r' ) && !listPositions.Exists(x => x.Item2 == j))
-                    {
-                        arr[j] = ' ';
-                    }
-                }
-
-                str = string.Concat(arr);
-            }
-            else
-            {
-                RemoveCharacter('\r');
-                RemoveCharacter('\n');
-            }
-
-            return str;
-
-            void RemoveCharacter(char character)
-            {
-                position = str.IndexOf(character);
-                while (NULL_POSITION != position)
-                {
-                    str = str.Substring(0, position) + " " + str.Substring(position + 1).Trim();
-
-                    position = str.IndexOf(character);
-                }
-            }
         }
 
 
@@ -1619,16 +2324,24 @@ namespace AnalyzeCode.MoreComplex
                 bool needsRethrow = false;
                 CatchClauseSyntax catchForThrowStatement = null;
                 // Case of the "Throw" that propagates the original exception. "Throw" without specific type.
-                if (((ObjectCreationExpressionSyntax)node.Expression) == null)
+                if (node.Expression is ObjectCreationExpressionSyntax objectCreationExpressionSyntax1 && ((ObjectCreationExpressionSyntax)node.Expression) == null)
                 {
                     catchForThrowStatement = GetCatchForThrowStatement(node);
                     catchType = catchForThrowStatement.Declaration.Type.ToFullString().Trim();
                     skipLevel++;
                     needsRethrow = true;
                 }
+                else if (node.Expression is ObjectCreationExpressionSyntax objectCreationExpressionSyntax2)
+                {
+                    catchType = objectCreationExpressionSyntax2.Type.ToFullString().Trim();
+                }
+                else if (node.Expression is InvocationExpressionSyntax invocationExpressionSyntax)
+                {
+                    catchType = invocationExpressionSyntax.Expression.ToFullString().Trim();
+                }
                 else
                 {
-                    catchType = ((ObjectCreationExpressionSyntax)node.Expression).Type.ToFullString().Trim();
+                    catchType = UNKNOWN;
                 }
 
                 // Check if the exception expression is an object creation (new Exception(...))
@@ -1676,6 +2389,7 @@ namespace AnalyzeCode.MoreComplex
 
                             // It constructs the method call with arguments.
                             string parametersFormattedStr = !string.IsNullOrEmpty(parametersStr) ? $"({parametersStr})" : string.Empty;
+                            parametersFormattedStr = FormaterStr.FormatStr(parametersFormattedStr);
                             var methodCallWithArguments =
                                 $"{callerSource} {THROW_EXCEPTION_ARROW} {callerTarget}: <font color=red>throw {catchType}{parametersFormattedStr}";
                             Actions.Add(methodCallWithArguments);
