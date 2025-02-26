@@ -26,6 +26,7 @@ namespace GenerateSeqDiagPlantUmlExtension
     using VSLangProj; // Asegúrate de incluir esta referencia
     using System.Collections.Generic;
     using System.IO;
+    using System.Reflection;
 
     internal sealed class GenerateSeqDiagPlantUmlCommand
     {
@@ -102,22 +103,35 @@ namespace GenerateSeqDiagPlantUmlExtension
 
             // Find the method that contains the cursor position
             MethodDeclarationSyntax methodNode = null;
-            var nodeAtCursor = root.FindNode(new TextSpan(cursorPosition, 1)); // Nodo en la posición exacta del cursor
+            //var nodeAtCursor = root.FindNode(new TextSpan(cursorPosition, 1)); // Nodo en la posición exacta del cursor
+            var nodeAtCursor = root.FindToken(cursorPosition).Parent;
             if (nodeAtCursor != null)
             {
                 // Buscar el método más cercano en los ancestros
-                methodNode = nodeAtCursor.AncestorsAndSelf()
+                //methodNode = nodeAtCursor.AncestorsAndSelf()
+                //    .OfType<MethodDeclarationSyntax>()
+                //    .FirstOrDefault();
+                methodNode = nodeAtCursor?.AncestorsAndSelf()
                     .OfType<MethodDeclarationSyntax>()
                     .FirstOrDefault();
 
-                // Si no se encuentra un método directamente, verificar si estamos al inicio del cuerpo
+
+                // If a method is not found directly, check if we are at the beginning of the body
                 if (methodNode == null)
                 {
+                    //var methodCandidates = root.DescendantNodes()
+                    //    .OfType<MethodDeclarationSyntax>()
+                    //    .Where(m => m.Body != null && m.Body.Span.Start <= cursorPosition && cursorPosition <= m.Body.Span.End)
+                    //    .OrderBy(m => m.Span.Start)
+                    //    .ToList();
                     var methodCandidates = root.DescendantNodes()
                         .OfType<MethodDeclarationSyntax>()
-                        .Where(m => m.Body != null && m.Body.Span.Start <= cursorPosition && cursorPosition <= m.Body.Span.End)
+                        .Where(m => m.Span.Start <= cursorPosition && cursorPosition <= m.Span.End)
                         .OrderBy(m => m.Span.Start)
                         .ToList();
+
+                    methodNode = methodCandidates.LastOrDefault(); // Tomar el más interno
+
 
                     if (methodCandidates.Any())
                     {
@@ -142,6 +156,27 @@ namespace GenerateSeqDiagPlantUmlExtension
                     .OfType<NamespaceDeclarationSyntax>()
                     .FirstOrDefault();
                 string namespaceName = namespaceNode?.Name.ToString();
+
+                //string methodName = string.Empty;
+                //string className = string.Empty;
+                //string namespaceName = string.Empty;
+                //CodeFunction codeElement = textSelection.ActivePoint.CodeElement[vsCMElement.vsCMElementFunction] as CodeFunction;
+                //if (codeElement != null)
+                //{
+                //    methodName = codeElement.Name;
+                //    className = (codeElement.Parent as CodeClass)?.Name;
+
+                //    var codeClass = codeElement.Parent as CodeClass;
+
+                //    // Find the ancestor that is CodeNamespace
+                //    CodeElement parent = codeClass?.Parent as CodeElement; // Parent is an object
+                //    while (parent != null && !(parent is CodeNamespace))
+                //    {
+                //        parent = parent.Collection.Parent as CodeElement; // Keep moving up the hierarchy
+                //    }
+
+                //    namespaceName = (parent as CodeNamespace)?.Name;
+                //}
 
                 // Get full file path
                 string filePath = activeDocument.FullName;
