@@ -1,0 +1,48 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<CodeAnalysisModelRoot xmlns:dm0="http://schemas.microsoft.com/VisualStudio/2008/DslTools/Core" xmlns:dm1="http://schemas.microsoft.com/dsltools/Common"
+  dslVersion="1.1.0.0"
+  Id="ffb20346-1834-4455-9be4-a78318073a7d"
+  modelType="ClassAnalysis" xmlns="http://schemas.microsoft.com/dsltools/CodeAnalysis">
+  <classes>
+    <class
+      Id="b2a45b5f-a295-42d0-b111-71599cfcc1f0"
+      name="ConverterToPlantUml"
+      parentElementId="00000000-0000-0000-0000-000000000000"
+      classPath="ConverterToPlantUml.cs">
+      <methods>
+        <methodMoniker
+          Id="886abd13-af41-452f-aa9d-da2d7f2e657a" />
+      </methods>
+    </class>
+  </classes>
+  <methods>
+    <method
+      Id="886abd13-af41-452f-aa9d-da2d7f2e657a"
+      name="GeneratePlantUml"
+      parentElementId="b2a45b5f-a295-42d0-b111-71599cfcc1f0"
+      visibility="Public"
+      isStatic="false"
+      returnType="">
+      <parameters>
+        <parameterMoniker
+          Id="5a44fb48-282c-4b30-8246-323d4b5de4f7" />
+        <parameterMoniker
+          Id="407f1475-a2b0-4828-a531-167e4a472329" />
+      </parameters>
+    </method>
+  </methods>
+  <parameters>
+    <parameter
+      Id="5a44fb48-282c-4b30-8246-323d4b5de4f7"
+      name="walker"
+      parentElementId="886abd13-af41-452f-aa9d-da2d7f2e657a"
+      valueType=""
+      objectType="" />
+    <parameter
+      Id="407f1475-a2b0-4828-a531-167e4a472329"
+      name="specifyDpi300"
+      parentElementId="886abd13-af41-452f-aa9d-da2d7f2e657a"
+      valueType=""
+      objectType="" />
+  </parameters>
+</CodeAnalysisModelRoot>

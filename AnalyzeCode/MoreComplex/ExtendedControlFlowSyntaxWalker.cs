@@ -2,6 +2,7 @@
 using System.Data;
 using System.Linq;
 using System.Text;
+using AnalyzeCode.MoreComplex.Token;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace AnalyzeCode.MoreComplex
@@ -113,7 +114,7 @@ namespace AnalyzeCode.MoreComplex
         /// <summary>
         /// The actions performed by the syntax walker, whose will be translated to PlantUml
         /// </summary>
-        public List<string> Actions { get; private set; } = new List<string>();
+        public List<AbstractToken> Actions { get; private set; } = new List<AbstractToken>();
 
         /// <summary>
         /// The compilation object used to resolve method calls.
@@ -191,10 +192,13 @@ namespace AnalyzeCode.MoreComplex
                 }
 
                 caller = className;
-                Actions.Add($"{ACTIVATE}{className}");
+                Actions.Add(new StringToken($"{ACTIVATE}{className}"));
                 string methodSignature = methodName + "(" + string.Join(", ", parametersList) + ")";
                 string initialFlow = $"Actor {ARROW} {className} : {FormaterStr.DeleteEnterAndCarriageReturnCharacters(methodSignature)}";
-                Actions.Add(initialFlow);
+                //Actions.Add(new StringToken(initialFlow));
+                CommonTokenType commonTokenType = new CommonTokenType(
+                    "Actor", className, ARROW, $"{FormaterStr.DeleteEnterAndCarriageReturnCharacters(methodSignature)}");
+                Actions.Add(new ComplexToken(commonTokenType));
             }
 
             caller = FormaterStr.FormatStr(caller.Trim());
@@ -222,7 +226,7 @@ namespace AnalyzeCode.MoreComplex
             // Base method is called to avoid interrupt the syntax Analisys
             base.VisitMethodDeclaration(node);
 
-            if(isInitialMethod) Actions.Add($"{DEACTIVATE}{caller}");
+            if(isInitialMethod) Actions.Add(new StringToken($"{DEACTIVATE}{caller}"));
 
             _methodDeclarationContextStack.Pop();
         }
@@ -473,9 +477,11 @@ namespace AnalyzeCode.MoreComplex
                 //}
                 //string statement = $"{_methodDeclarationContextStack.Peek().PreviousCaller} --> {called}:{method}";
                 string statement = $"{_methodDeclarationContextStack.Peek().PreviousCaller} {ARROW} {called}:{methodCallWithArguments}";
+                CommonTokenType commonTokenType = new CommonTokenType(
+                    _methodDeclarationContextStack.Peek().PreviousCaller, called, ARROW, methodCallWithArguments);
                 Console.WriteLine(statement);
 
-                ProcessInvocation(_methodDeclarationContextStack.Peek().PreviousCaller, called, statement, currentNode);
+                ProcessInvocation(_methodDeclarationContextStack.Peek().PreviousCaller, called, commonTokenType, currentNode);
 
                 previousNode = invocationsArray[i];
                 
@@ -586,11 +592,11 @@ namespace AnalyzeCode.MoreComplex
         /// </summary>
         /// <param name="caller"></param>
         /// <param name="called"></param>
-        /// <param name="statement"></param>
+        /// <param name="commonTokenType"></param>
         /// <param name="node"></param>
         /// <returns name="_invocationExpressionSyntaxesStack">Global _invocationExpressionSyntaxesStack.Pop();</returns>
         /// <returns name="_countDept">Global --_countDept;</returns>
-        private void ProcessInvocation(string caller, string called, string statement, InvocationExpressionSyntax node)
+        private void ProcessInvocation(string caller, string called, CommonTokenType commonTokenType, InvocationExpressionSyntax node)
         {
             // Download all the assignments in Stack to Actions list and assign the new caller.
             DownloadStackAssignmentToActionListAndAssignCaller(caller);
@@ -600,8 +606,8 @@ namespace AnalyzeCode.MoreComplex
 
             _invocationExpressionSyntaxesStack.Push(Tuple.Create(node, called, methodDeclarationCurrentInvocation));
 
-            Actions.Add(statement);
-            Actions.Add($"{ACTIVATE}{called}");
+            Actions.Add(new ComplexToken(commonTokenType));
+            Actions.Add(new StringToken($"{ACTIVATE}{called}"));
 
             // Resolve the called method
             // NOTE. - See (1*) Set the arguments of the method call)
@@ -610,7 +616,7 @@ namespace AnalyzeCode.MoreComplex
                 Visit(methodDeclarationCurrentInvocation);
             }
 
-            Actions.Add($"{DEACTIVATE}{called}");
+            Actions.Add(new StringToken($"{DEACTIVATE}{called}"));
 
             // Download all the assignments in Stack to Actions list.
             DownloadStackAssignmentToActionListAndAssignCaller(caller);
@@ -1370,7 +1376,7 @@ namespace AnalyzeCode.MoreComplex
 
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
             string formattedCondition = FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Condition.ToString());
-            Actions.Add($"{ALT} {formattedCondition}"); // Marcar inicio del bloque 'if'
+            Actions.Add(new StringToken($"{ALT} {formattedCondition}")); // Marcar inicio del bloque 'if'
 
             // Visitar el bloque 'then'
             Visit(node.Statement);
@@ -1380,7 +1386,7 @@ namespace AnalyzeCode.MoreComplex
 
             if (node.Else != null)
             {
-                Actions.Add($"else Not ({formattedCondition})"); // Marcar inicio del bloque 'else'
+                Actions.Add(new StringToken($"else Not ({formattedCondition})")); // Marcar inicio del bloque 'else'
 
                 // Visitar el bloque 'else'
                 Visit(node.Else.Statement);
@@ -1389,7 +1395,7 @@ namespace AnalyzeCode.MoreComplex
                 DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
             }
 
-            Actions.Add("end"); // Fin del bloque 'if' o 'else'
+            Actions.Add(new StringToken("end")); // Fin del bloque 'if' o 'else'
         }
 
         /// <summary>
@@ -1405,8 +1411,9 @@ namespace AnalyzeCode.MoreComplex
             var loopType = GetLoopType(node); // Determinar en qué bucle está el continue
 
             // Agregar al diagrama de secuencia
-            //Actions.Add($"{className}.{methodName} : continue in {loopType}");
-            Actions.Add($"{className} {DOUBLE_ARROW} {className} : Continue next iteration in {loopType}");
+            CommonTokenType commonTokenType = new CommonTokenType(
+                className, className, DOUBLE_ARROW, $"Continue next iteration in {loopType}");
+            Actions.Add(new ComplexToken(commonTokenType));
 
             base.VisitContinueStatement(node);
         }
@@ -1813,15 +1820,17 @@ namespace AnalyzeCode.MoreComplex
         {
             if (_asignmentInfoStack.StackAsignment.Count > 0 && !string.IsNullOrEmpty(_asignmentInfoStack.Caller))
             {
-                string strAssignments = $"{NOTE_OVER}" + _asignmentInfoStack.Caller + " : " +
-                                        string.Join("\\n", _asignmentInfoStack.StackAsignment.Reverse().Select(x=> x.Trim()));
-                int lineLimit = 100;
+                string strAssignments = string.Join("\\n", _asignmentInfoStack.StackAsignment.Reverse().Select(x=> x.Trim()));
+                
+                int lineLimit = 1100;
                 string final = "...\\n";
                 if (strAssignments.Length > lineLimit)
                 {
                     strAssignments = strAssignments.Substring(0, lineLimit - final.Length) + final;
                 }
-                Actions.Add(strAssignments);
+                NoteOverTokenType noteOverTokenType = new NoteOverTokenType(_asignmentInfoStack.Caller, ":",
+                    strAssignments);
+                Actions.Add(new SymplexToken(noteOverTokenType));
             }
             _asignmentInfoStack.StackAsignment.Clear();
 
@@ -1847,7 +1856,7 @@ namespace AnalyzeCode.MoreComplex
             // Download all the assignments in Stack to Actions list.
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
-            Actions.Add("end");
+            Actions.Add(new StringToken("end"));
         }
 
         /// <summary>
@@ -1867,11 +1876,11 @@ namespace AnalyzeCode.MoreComplex
                 if (caseLabel != null)
                 {
                     var caseValue = caseLabel.Value.ToString();
-                    Actions.Add($"{ALT_CASE} " + FormaterStr.DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == " + caseValue));
+                    Actions.Add(new StringToken($"{ALT_CASE} " + FormaterStr.DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == " + caseValue)));
                 }
                 else
                 {
-                    Actions.Add($"{ALT_CASE} " + FormaterStr.DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == default"));
+                    Actions.Add(new StringToken($"{ALT_CASE} " + FormaterStr.DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == default")));
                 }
                 switchStatementInfo.FirstCaseStatement = false;
             }
@@ -1881,11 +1890,11 @@ namespace AnalyzeCode.MoreComplex
                 if (caseLabel != null)
                 {
                     var caseValue = caseLabel.Value.ToString();
-                    Actions.Add("else case " + FormaterStr.DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == " + caseValue));
+                    Actions.Add(new StringToken("else case " + FormaterStr.DeleteEnterAndCarriageReturnCharacters(switchStatementInfo.Expression + " == " + caseValue)));
                 }
                 else
                 {
-                    Actions.Add("else case default");
+                    Actions.Add(new StringToken("else case default"));
                 }
             }
 
@@ -1903,8 +1912,8 @@ namespace AnalyzeCode.MoreComplex
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            Actions.Add("loop For:" + node.Declaration + "; " +
-                        FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Condition.ToString()) + " ; " + node.Incrementors);
+            Actions.Add(new StringToken("loop For:" + node.Declaration + "; " +
+                                        FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Condition.ToString()) + " ; " + node.Incrementors));
 
             AddNoteToVisited(node);
 
@@ -1916,30 +1925,23 @@ namespace AnalyzeCode.MoreComplex
 
             _visitedNodes.Remove(node);
 
-            Actions.Add("end");
+            Actions.Add(new StringToken("end"));
         }
 
         public override void VisitBreakStatement(BreakStatementSyntax node)
         {
-            //if (node.Parent is BlockSyntax block && block.Parent is IfStatementSyntax ifStatement &&
-            //    (ifStatement.Parent is ForStatementSyntax || ifStatement.Parent is ForEachStatementSyntax ||
-            //     ifStatement.Parent is WhileStatementSyntax // || ifStatement.Parent is LoopStatementSyntax)) // Only in visual Basic LoopStatementSyntax
-            //        ))
-            //{
-            //    var caller = GetCaller(node);
-            //    Actions.Add($"{caller} {ARROW} {caller} (exit loop)");
-            //    Actions.Add("return");
-            //}
             if (node.Parent is BlockSyntax block &&
                 (block.Parent is IfStatementSyntax || block.Parent is ForStatementSyntax || 
                  block.Parent is ForEachStatementSyntax || block.Parent is WhileStatementSyntax))
-                //(ifStatement.Parent is ForStatementSyntax || ifStatement.Parent is ForEachStatementSyntax ||
-                // ifStatement.Parent is WhileStatementSyntax // || ifStatement.Parent is LoopStatementSyntax)) // Only in visual Basic LoopStatementSyntax
-                //    ))
             {
-                var caller = GetCaller(node);
-                Actions.Add($"{caller} {ARROW} {caller} : break (Exit loop)");
-                Actions.Add("return");
+                //var caller = GetCaller(node);
+                var caller = GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1);
+                
+                CommonTokenType commonTokenType = new CommonTokenType(
+                    caller, caller, ARROW, "break (Exit loop)");
+                Actions.Add(new ComplexToken(commonTokenType));
+
+                Actions.Add(new StringToken("return"));
             }
 
             base.VisitBreakStatement(node);
@@ -1956,9 +1958,12 @@ namespace AnalyzeCode.MoreComplex
             Tuple<string, string> classAndMethodNodeBelongs = GetMethodAndClass(node);
             
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            Actions.Add(
-                $"{classAndMethodNodeBelongs.Item1} {DOUBLE_ARROW} {caller} : return {FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Expression != null ? node.Expression.ToFullString() : string.Empty)}");
-            
+            //Actions.Add(new StringToken(
+            //    $"{classAndMethodNodeBelongs.Item1} {DOUBLE_ARROW} {caller} : return {FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Expression != null ? node.Expression.ToFullString() : string.Empty)}"));
+
+            Actions.Add(new ComplexToken(new CommonTokenType(classAndMethodNodeBelongs.Item1, caller, DOUBLE_ARROW,
+                $"return {FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Expression != null ? node.Expression.ToFullString() : string.Empty)}")));
+
             base.VisitReturnStatement(node);
         }
 
@@ -2061,7 +2066,7 @@ namespace AnalyzeCode.MoreComplex
 
             string condition = node.Condition.ToString(); //ProcessExpression(node.Condition);
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            Actions.Add($"loop While: {FormaterStr.DeleteEnterAndCarriageReturnCharacters(condition)}");
+            Actions.Add(new StringToken($"loop While: {FormaterStr.DeleteEnterAndCarriageReturnCharacters(condition)}"));
 
             // Base method is called to avoid interrupt the syntax Analisys
             base.VisitWhileStatement(node);
@@ -2069,7 +2074,7 @@ namespace AnalyzeCode.MoreComplex
             // Download all the assignments in Stack to Actions list.
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
-            Actions.Add("end");
+            Actions.Add(new StringToken("end"));
         }
 
         /// <summary>
@@ -2156,12 +2161,12 @@ namespace AnalyzeCode.MoreComplex
 
             string condition = node.Condition.ToString();// ProcessExpression(node.Condition);
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            Actions.Add($"loop Do-While: {FormaterStr.DeleteEnterAndCarriageReturnCharacters(condition)}");
+            Actions.Add(new StringToken($"loop Do-While: {FormaterStr.DeleteEnterAndCarriageReturnCharacters(condition)}"));
 
             // Base method is called to avoid interrupt the syntax Analisys
             base.VisitDoStatement(node);
 
-            Actions.Add("end");
+            Actions.Add(new StringToken("end"));
         }
 
         /// <summary>
@@ -2174,7 +2179,7 @@ namespace AnalyzeCode.MoreComplex
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
             // To avoid problems when rendering enters, for multi-line conditions, it is replaced with white space
-            Actions.Add($"loop Foreach: {FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Expression.ToString())}");
+            Actions.Add(new StringToken($"loop Foreach: {FormaterStr.DeleteEnterAndCarriageReturnCharacters(node.Expression.ToString())}"));
 
             // Base method is called to avoid interrupt the syntax Analisys
             base.VisitForEachStatement(node);
@@ -2182,7 +2187,7 @@ namespace AnalyzeCode.MoreComplex
             // Download all the assignments in Stack to Actions list.
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
-            Actions.Add("end");
+            Actions.Add(new StringToken("end"));
         }
 
 
@@ -2228,7 +2233,7 @@ namespace AnalyzeCode.MoreComplex
             // Download all the assignments in Stack to Actions list.
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
-            Actions.Add(TRY_GROUP);
+            Actions.Add(new StringToken(TRY_GROUP));
 
             if (_invocationExpressionSyntaxesStack.Count > 0)
             {
@@ -2245,7 +2250,7 @@ namespace AnalyzeCode.MoreComplex
 
             _tryStatementSyntaxesStack.Pop();
             
-            Actions.Add("end");
+            Actions.Add(new StringToken("end"));
         }
 
         public override void VisitCatchClause(CatchClauseSyntax node)
@@ -2257,15 +2262,15 @@ namespace AnalyzeCode.MoreComplex
                 ? $" (rethrown {_rethrownExceptionsStack.Peek().Item1.Declaration?.Type})"
                 : string.Empty;
             
-            if (node.Declaration != null) Actions.Add($"{CATCH_GROUP} {node.Declaration.Type}{additionalMessage}");
-            else Actions.Add($"{CATCH_GROUP}{additionalMessage}");
+            if (node.Declaration != null) Actions.Add(new StringToken($"{CATCH_GROUP} {node.Declaration.Type}{additionalMessage}"));
+            else Actions.Add(new StringToken($"{CATCH_GROUP}{additionalMessage}"));
             
             base.VisitCatchClause(node);
 
             // Download all the assignments in Stack to Actions list.
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
-            Actions.Add("end");
+            Actions.Add(new StringToken("end"));
         }
 
         /// <summary>
@@ -2373,7 +2378,7 @@ namespace AnalyzeCode.MoreComplex
                                 var parentMethod = catchClauseSyntax.Ancestors().OfType<MethodDeclarationSyntax>().FirstOrDefault();
                                 if (parentMethod != null)
                                 {
-                                    callerTarget = GetCallerNotUsingStackInvocationExpression(parentMethod);
+                                    callerTarget = _methodDeclarationContextStack.Any() ? _methodDeclarationContextStack.Last().CallerMethodDeclaration : GetCallerNotUsingStackInvocationExpression(parentMethod);
                                 }
                             }
                             else
@@ -2390,9 +2395,10 @@ namespace AnalyzeCode.MoreComplex
                             // It constructs the method call with arguments.
                             string parametersFormattedStr = !string.IsNullOrEmpty(parametersStr) ? $"({parametersStr})" : string.Empty;
                             parametersFormattedStr = FormaterStr.FormatStr(parametersFormattedStr);
-                            var methodCallWithArguments =
-                                $"{callerSource} {THROW_EXCEPTION_ARROW} {callerTarget}: <font color=red>throw {catchType}{parametersFormattedStr}";
-                            Actions.Add(methodCallWithArguments);
+                            
+                            CommonTokenType commonTokenType = new CommonTokenType(callerSource, callerTarget, THROW_EXCEPTION_ARROW,
+                                $"<font color=red>throw {catchType}{parametersFormattedStr}");
+                            Actions.Add(new ComplexToken(commonTokenType));
 
                             //if (needsRethrow)
                             //{
@@ -2419,12 +2425,14 @@ namespace AnalyzeCode.MoreComplex
                         : invocationExpressionSyntaxesSource.Item2;
 
                     string parametersFormattedStr = !string.IsNullOrEmpty(parametersStr) ? $"({parametersStr})" : string.Empty;
-                    var methodCallWithArguments = $"{callerSource} {THROW_EXCEPTION_ARROW} {callerTarget}: <font color=red>throw {catchType}{parametersFormattedStr}";
-                    Actions.Add(methodCallWithArguments);
-                    Actions.Add($"{DESTROY} {callerTarget}");
+                    //var methodCallWithArguments = $"{callerSource} {THROW_EXCEPTION_ARROW} {callerTarget}: <font color=red>throw {catchType}{parametersFormattedStr}";
+                    //Actions.Add(new StringToken(methodCallWithArguments));
+
+                    CommonTokenType commonTokenType = new CommonTokenType(callerSource, callerTarget, THROW_EXCEPTION_ARROW,
+                        $"<font color=red>throw {catchType}{parametersFormattedStr}");
+                    Actions.Add(new ComplexToken(commonTokenType));
+                    Actions.Add(new StringToken($"{DESTROY} {callerTarget}"));
                 }
-                
-                //Console.WriteLine($"Throw founded in line {node.GetLocation().GetLineSpan().StartLinePosition.Line + 1}");
             }
             else
             {
@@ -2433,9 +2441,11 @@ namespace AnalyzeCode.MoreComplex
                 string callerSource = GetCaller(node);
 
                 string parametersStr = GetStrConcatParametersException(node);
-                var methodCallWithArguments = $"{callerSource} {THROW_EXCEPTION_ARROW} {callerTarget}: <font color=red>throw {((ObjectCreationExpressionSyntax)node.Expression).Type.ToFullString().Trim()}({parametersStr})";
-                Actions.Add(methodCallWithArguments);
-                Actions.Add($"{DESTROY} {callerTarget}");
+                
+                CommonTokenType commonTokenType = new CommonTokenType(callerSource, callerTarget, THROW_EXCEPTION_ARROW, $"<font color=red>throw {((ObjectCreationExpressionSyntax)node.Expression).Type.ToFullString().Trim()}({parametersStr}");
+                Actions.Add(new ComplexToken(commonTokenType));
+
+                Actions.Add(new StringToken($"{DESTROY} {callerTarget}"));
             }
         }
 
@@ -2506,14 +2516,14 @@ namespace AnalyzeCode.MoreComplex
                 GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
             var s = node.ToFullString();
-            Actions.Add($"{FINALLY_GROUP}");
+            Actions.Add(new StringToken($"{FINALLY_GROUP}"));
 
             base.VisitFinallyClause(node);
 
             // Download all the assignments in Stack to Actions list.
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
-            Actions.Add("end");
+            Actions.Add(new StringToken("end"));
         }
 
         #endregion
@@ -2528,14 +2538,14 @@ namespace AnalyzeCode.MoreComplex
             // Download all the assignments in Stack to Actions list.
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
-            Actions.Add($"{LOCK_GROUP}({node.Expression?.ToFullString()})");
+            Actions.Add(new StringToken($"{LOCK_GROUP}({FormaterStr.FormatStr(node.Expression?.ToFullString())})"));
 
             base.VisitLockStatement(node);
 
             // Download all the assignments in Stack to Actions list.
             DownloadStackAssignmentToActionListAndAssignCaller(GetCallerClassFromMethodContainerNode(node, positionAncestorAnalyzed: 1));
 
-            Actions.Add("end");
+            Actions.Add(new StringToken("end"));
         }
         #endregion
     }

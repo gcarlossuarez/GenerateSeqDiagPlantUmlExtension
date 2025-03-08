@@ -91,6 +91,12 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="MoreComplex\Token\CommonTokenType.cs" />
+    <Compile Include="MoreComplex\Token\ComplexToken.cs" />
+    <Compile Include="MoreComplex\Token\AbstractToken.cs" />
+    <Compile Include="MoreComplex\Token\NoteOverTokenType.cs" />
+    <Compile Include="MoreComplex\Token\StringToken.cs" />
+    <Compile Include="MoreComplex\Token\SymplexToken.cs" />
     <Compile Include="Utils\ComentRemover.cs" />
     <Compile Include="Converter.cs" />
     <Compile Include="MoreComplex\Autoincrement.cs" />

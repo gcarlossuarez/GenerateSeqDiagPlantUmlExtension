@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using AnalyzeCode.MoreComplex.Token;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace AnalyzeCode.MoreComplex
@@ -42,77 +43,80 @@ namespace AnalyzeCode.MoreComplex
                 ExtendedControlFlowSyntaxWalker.ARROW,
                 //ExtendedControlFlowSyntaxWalker.NOTE_OVER,
             };
-            foreach (var call in walker.Actions)
+            foreach (var callToken in walker.Actions)
             {
-                for (int i = 0; i < separators.Length; ++i)
+                if (callToken.GetType().Name == new ComplexToken().GetType().Name)
                 {
-                    var parts = call.Split(new string[] { separators[i] }, StringSplitOptions.None);
-                    if (parts.Length > 1)
+                    ComplexToken complexToken = callToken as ComplexToken;
+                    string caller = complexToken?.BaseTokenType.Caller;
+                    string called = complexToken?.BaseTokenType.Called;
+                    participantId = CreateParticipantIds(caller, called);
+                }
+                else if (callToken.GetType().Name == new StringToken().GetType().Name)
+                {
+                    string call = callToken is StringToken ? callToken.ToString() : string.Empty;
+
+                    for (int i = 0; i < separators.Length; ++i)
                     {
-                        var caller = parts[0].Trim();
-                        var called = parts[1].Substring(0, parts[1].IndexOf(":", StringComparison.Ordinal)).Trim();
-
-                        // Ensure that each participant has a unique alias
-
-                        //if (separators[i] == ExtendedControlFlowSyntaxWalker.NOTE_OVER)
-                        //{
-                        //    participantAliases[called] = $"P{participantId++}";
-                        //    continue;
-                        //}
-                        if (!participantAliases.ContainsKey(caller))
+                        var parts = call.Split(new string[] { separators[i] }, StringSplitOptions.None);
+                        if (parts.Length > 1)
                         {
-                            participantAliases[caller] = $"P{participantId++}";
-                            stringBuilder.AppendLine($"participant {participantAliases[caller]} as \"{caller}\"");
-                        }
-                        if (!participantAliases.ContainsKey(called))
-                        {
-                            participantAliases[called] = $"P{participantId++}";
-                            stringBuilder.AppendLine($"participant {participantAliases[called]} as \"{called}\"");
-                        }
+                            var caller = parts[0].Trim();
+                            var called = parts[1].Substring(0, parts[1].IndexOf(":", StringComparison.Ordinal)).Trim();
 
-                        break;
+                            participantId = CreateParticipantIds(caller, called);
+
+                            break;
+                        }
                     }
                 }
+            }
+            int CreateParticipantIds(string caller, string called)
+            {
+                if (!participantAliases.ContainsKey(caller))
+                {
+                    participantAliases[caller] = $"P{participantId++}";
+                    stringBuilder.AppendLine($"participant {participantAliases[caller]} as \"{caller}\"");
+                }
+
+                if (!participantAliases.ContainsKey(called))
+                {
+                    participantAliases[called] = $"P{participantId++}";
+                    stringBuilder.AppendLine($"participant {participantAliases[called]} as \"{called}\"");
+                }
+
+                return participantId;
             }
 
             // Add all actions directly into the diagram
             // Replace the caller and callee with it's aliases for every call
-            foreach (var action in walker.Actions)
+            foreach (var actionToken in walker.Actions)
             {
-                bool founded = false;
-                var parts = action.Split(new string[] { $" {ExtendedControlFlowSyntaxWalker.DOUBLE_ARROW} " }, StringSplitOptions.None);
-                if (parts.Length > 1)
+                if (actionToken.GetType().Name == new ComplexToken().GetType().Name)
                 {
-                    founded = true;
-
-                    var caller = parts[0].Trim();
-                    var called = parts[1].Substring(0, parts[1].IndexOf(":", StringComparison.Ordinal)).Trim();
-                    var methodDetails = parts[1].Substring(parts[1].IndexOf(":", StringComparison.Ordinal) + 1).Trim();
-
-                    stringBuilder.AppendLine(
-                        $"{participantAliases[caller]} {ExtendedControlFlowSyntaxWalker.DOUBLE_ARROW} {participantAliases[called]}: {methodDetails}");
-                }
-                
-                if(!founded)
-                {
-                    parts = action.Split(new string[] { $" {ExtendedControlFlowSyntaxWalker.ARROW} " }, StringSplitOptions.None);
-                    if (parts.Length > 1)
+                    ComplexToken complexToken = actionToken as ComplexToken;
+                    if (complexToken != null)
                     {
-                        founded = true;
-
-                        var caller = parts[0].Trim();
-                        var called = parts[1].Substring(0, parts[1].IndexOf(":", StringComparison.Ordinal)).Trim();
-                        var methodDetails = parts[1].Substring(parts[1].IndexOf(":", StringComparison.Ordinal) + 1).Trim();
-
                         stringBuilder.AppendLine(
-                            $"{participantAliases[caller]} {ExtendedControlFlowSyntaxWalker.ARROW} {participantAliases[called]}: {methodDetails}");
+                            $"{participantAliases[complexToken.BaseTokenType.Caller]} {complexToken.BaseTokenType.Arrow} {participantAliases[complexToken.BaseTokenType.Called]}: {complexToken.BaseTokenType.Invocated}");
                     }
                 }
-
-                if (!founded)
+                else if (actionToken.GetType().Name == new SymplexToken().GetType().Name)
                 {
+                    SymplexToken symplexToken = actionToken as SymplexToken;
+                    if (symplexToken != null)
+                    {
+                        stringBuilder.AppendLine(
+                            $"{ExtendedControlFlowSyntaxWalker.NOTE_OVER} {participantAliases[symplexToken.NoteOverTokenType.Left]} {symplexToken.NoteOverTokenType.Operator} {symplexToken.NoteOverTokenType.Right}");
+                    }
+                }
+                else if (actionToken.GetType().Name == new StringToken().GetType().Name)
+                {
+                    string action = actionToken.ToString();
+                    bool founded = false;
+                    
                     // Replace the callee with it's alias if action is activate
-                    parts = action.Split(new string[] { ExtendedControlFlowSyntaxWalker.ACTIVATE }, StringSplitOptions.None);
+                    var parts = action.Split(new string[] { ExtendedControlFlowSyntaxWalker.ACTIVATE }, StringSplitOptions.None);
                     if (parts.Length > 1 && action.StartsWith(ExtendedControlFlowSyntaxWalker.ACTIVATE)) // To avoid a confussion with "deactivate"
                     {
                         founded = true;
@@ -120,70 +124,38 @@ namespace AnalyzeCode.MoreComplex
                         stringBuilder.AppendLine(
                             $"{ExtendedControlFlowSyntaxWalker.ACTIVATE}{participantAliases[called]}");
                     }
-                }
 
-                if (!founded)
-                {
-                    // Replace the callee with it's alias if action is deactivate
-                    parts = action.Split(new string[] { ExtendedControlFlowSyntaxWalker.DEACTIVATE }, StringSplitOptions.None);
-                    if (parts.Length > 1 && action.StartsWith(ExtendedControlFlowSyntaxWalker.DEACTIVATE))
+                    if (!founded)
                     {
-                        founded = true;
-                        var called = parts[1];
-                        stringBuilder.AppendLine($"{ExtendedControlFlowSyntaxWalker.DEACTIVATE}{participantAliases[called]}");
-                    }
-                }
-
-                if (!founded)
-                {
-                    parts = action.Split(new string[] { ExtendedControlFlowSyntaxWalker.NOTE_OVER }, StringSplitOptions.None);
-                    if (parts.Length > 1)
-                    {
-                        parts = parts[1].Split(new string[] { " : " }, StringSplitOptions.None);
-                        if (parts.Length > 1)
+                        // Replace the callee with it's alias if action is deactivate
+                        parts = action.Split(new string[] { ExtendedControlFlowSyntaxWalker.DEACTIVATE }, StringSplitOptions.None);
+                        if (parts.Length > 1 && action.StartsWith(ExtendedControlFlowSyntaxWalker.DEACTIVATE))
                         {
                             founded = true;
-                            var called = parts[0];
-                            stringBuilder.AppendLine($"{ExtendedControlFlowSyntaxWalker.NOTE_OVER}{participantAliases[called]} : {parts[1]}");
+                            var called = parts[1];
+                            stringBuilder.AppendLine($"{ExtendedControlFlowSyntaxWalker.DEACTIVATE}{participantAliases[called]}");
                         }
                     }
-                }
 
-                if (!founded)
-                {
-                    parts = action.Split(new string[] { ExtendedControlFlowSyntaxWalker.THROW_EXCEPTION_ARROW },
-                        StringSplitOptions.None);
-                    if (parts.Length > 1)
+                    if (!founded)
                     {
-                        founded = true;
-
-                        var caller = parts[0].Trim();
-                        var called = parts[1].Substring(0, parts[1].IndexOf(":", StringComparison.Ordinal)).Trim();
-                        var methodDetails = parts[1].Substring(parts[1].IndexOf(":", StringComparison.Ordinal) + 1).Trim();
-
-                        stringBuilder.AppendLine(
-                            $"{participantAliases[caller]} {ExtendedControlFlowSyntaxWalker.THROW_EXCEPTION_ARROW} {participantAliases[called]}: {methodDetails}");
+                        if (action.Trim().StartsWith(ExtendedControlFlowSyntaxWalker.DESTROY))
+                        {
+                            founded = true;
+                            String called = action.Trim().Replace(ExtendedControlFlowSyntaxWalker.DESTROY, string.Empty);
+                            stringBuilder.AppendLine(
+                                $"{ExtendedControlFlowSyntaxWalker.DESTROY} {participantAliases[called.Trim()]}");
+                        }
                     }
 
+                    if (!founded) stringBuilder.AppendLine($"{action}");
                 }
-
-                if (!founded)
-                {
-                    if (action.Trim().StartsWith(ExtendedControlFlowSyntaxWalker.DESTROY))
-                    {
-                        founded = true;
-                        String called = action.Trim().Replace(ExtendedControlFlowSyntaxWalker.DESTROY, string.Empty);
-                        stringBuilder.AppendLine(
-                            $"{ExtendedControlFlowSyntaxWalker.DESTROY} {participantAliases[called.Trim()]}");
-                    }
-                }
-
-                if (!founded) stringBuilder.AppendLine($"{action}");
                 
             }
 
             stringBuilder.AppendLine("@enduml");
             return stringBuilder.ToString();
+
         }
 
     }

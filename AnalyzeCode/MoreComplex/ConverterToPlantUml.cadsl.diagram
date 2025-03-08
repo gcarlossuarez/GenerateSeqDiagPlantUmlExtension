@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<CodeAnalysisDiagram
+  dslVersion="1.1.0.0"
+  Id="a399ccea-4f16-434e-ad02-d3f51161a24d"
+  absoluteBounds="0, 0, 11, 8.5"
+  diagramId="349319bb-810f-47f4-bbc8-7176ae294431">
+  <CodeAnalysisModelRootMoniker
+    Id="ffb20346-1834-4455-9be4-a78318073a7d" />
+  <nestedChildShapes>
+    <classShape
+      Id="b4b75ff3-3d03-4036-9477-bab6db213357"
+      absoluteBounds="4, 1, 0.85000002384185791, 0.85000002384185791">
+      <classMoniker
+        Id="b2a45b5f-a295-42d0-b111-71599cfcc1f0" />
+      <relativeChildShapes />
+    </classShape>
+    <methodShape
+      Id="80868b0f-0c24-4a3d-a9ce-a260df3c6bad"
+      absoluteBounds="3, 4, 0.5, 0.574999988079071">
+      <methodMoniker
+        Id="886abd13-af41-452f-aa9d-da2d7f2e657a" />
+      <relativeChildShapes />
+    </methodShape>
+    <parameterShape
+      Id="5897e721-4e02-42f3-b901-a49a5cc4b4f9"
+      absoluteBounds="3, 5, 0.28333333134651184, 0.28333333134651184">
+      <parameterMoniker
+        Id="5a44fb48-282c-4b30-8246-323d4b5de4f7" />
+      <relativeChildShapes />
+    </parameterShape>
+    <parameterShape
+      Id="a4f390b2-151d-406a-b638-912ce291b0e9"
+      absoluteBounds="3, 5.625, 0.28333333134651184, 0.28333333134651184">
+      <parameterMoniker
+        Id="407f1475-a2b0-4828-a531-167e4a472329" />
+      <relativeChildShapes />
+    </parameterShape>
+  </nestedChildShapes>
+</CodeAnalysisDiagram>

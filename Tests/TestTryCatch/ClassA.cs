@@ -10,6 +10,12 @@ namespace TestTryCatch
     {
         public void CallATest1()
         {
+			for(int i = 0; i < 3; ++i)
+			{
+				if(i == 1) {
+					break;
+				}
+			}
             try
             {
                 ClassB classB = new ClassB();

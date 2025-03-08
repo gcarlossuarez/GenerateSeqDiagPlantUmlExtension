@@ -19,7 +19,7 @@ namespace AnalyzeCode.Utils
         public static string FormatStr(string str, bool allocatingOnStack = false, bool truncanteLongLine = false)
         {
             string strFormatted = DeleteEnterAndCarriageReturnCharacters(Utils.CommentRemover.RemoveComments(str), allocatingOnStack);
-            strFormatted = strFormatted.Replace(":", " ");
+            //strFormatted = strFormatted.Replace(":", " ");
             if (truncanteLongLine)
             {
                 strFormatted = TruncateLongLine(strFormatted);
