@@ -97,5 +97,39 @@ namespace TestTryCatch
                 Console.WriteLine("Ending ClassB.CallBTest8");
             }
         }
+
+        public void CallBTest9()
+        {
+            try
+            {
+                ClassC classC = new ClassC();
+                classC.CallCTest9(true);
+            }
+            catch (IndexOutOfRangeException e)
+            {
+                Console.WriteLine(e);
+            }
+            finally
+            {
+                Console.WriteLine("Ending ClassB.CallBTest8");
+            }
+        }
+
+        public void CallBTest10()
+        {
+            try
+            {
+                ClassC classC = new ClassC();
+                classC.CallCTest10(true);
+            }
+            catch (IndexOutOfRangeException e)
+            {
+                Console.WriteLine(e);
+            }
+            finally
+            {
+                Console.WriteLine("Ending ClassB.CallBTest8");
+            }
+        }
     }
 }

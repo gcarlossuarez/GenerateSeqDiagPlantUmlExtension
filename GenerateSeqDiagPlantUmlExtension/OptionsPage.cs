@@ -22,7 +22,7 @@ namespace GenerateSeqDiagPlantUmlExtension
         public int MaxDeep { get; set; } = 200;
 
         [Category("Configuration")]
-        [DisplayName("Format Output diagram")]
+        [DisplayName("Format Output Diagram")]
         [Description("PlantUML output format for PlantUML File. Png = Image (For view in Image Viewer), Svg = (For view in Web Navigatgor) For view in Web Navigator, None = Only text file es showed.")]
         public FormatPlantUmlOutputDiagram FormatPlantUmlOutputDiagram { get; set; } = FormatPlantUmlOutputDiagram.Png;
 
@@ -50,6 +50,11 @@ namespace GenerateSeqDiagPlantUmlExtension
         [DisplayName("Include Referenced Projects From Solution.")]
         [Description("Recommended if you whish work with other projects referenced from Project's file contains Method selected (It can be heavy to mange). Default:false")]
         public bool IncludeReferencedProjectsFromSolution { get; set; } = true;
+
+        [Category("Configuration")]
+        [DisplayName("Allow collapse nodes in svg file.")]
+        [Description("Only enabled if Format Output Diagram is SVG. If Format Output Diagram is not SVG, automatically takes false value. Default:true")]
+        public bool CollapseNodesInSvg { get; set; } = true;
     }
 
     public enum FormatPlantUmlOutputDiagram

@@ -216,6 +216,7 @@ namespace GenerateSeqDiagPlantUmlExtension
                 Encoding encodingPlantUmlTextFile = optionsPage.EncodingPlantUmlTextFile;
                 int plantUmlLimitSize = optionsPage.PlantUmlLimitSize;
                 int dpi = optionsPage.Dpi;
+                bool collapseNodesInSvg = optionsPage.CollapseNodesInSvg;
 
                 if (maxDeep < 1)
                 {
@@ -272,7 +273,8 @@ namespace GenerateSeqDiagPlantUmlExtension
                     formatPlantUmlOutput: formatPlantUmlOutput,
                     encodingPlantUmlTextFile: encodingPlantUmlTextFile,
                     plantUmlLimitSize: plantUmlLimitSize,
-                    dpi: dpi);
+                    dpi: dpi,
+                    collapseNodesInSvg: collapseNodesInSvg);
                 Console.WriteLine(plantUml);
             }
             else
@@ -286,188 +288,7 @@ namespace GenerateSeqDiagPlantUmlExtension
                     OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
             }
         }
-        //private void Execute(object sender, EventArgs e)
-        //{
-        //    ThreadHelper.ThrowIfNotOnUIThread();
-
-        //    // Get DTE instance
-        //    var dte = (DTE2)Package.GetGlobalService(typeof(DTE));
-
-        //    // Get active document
-        //    var activeDocument = dte.ActiveDocument;
-
-        //    var textSelection = (TextSelection)activeDocument.Selection;
-
-        //    var codeElement = textSelection.ActivePoint.CodeElement[vsCMElement.vsCMElementFunction];
-
-        //    if (codeElement != null)
-        //    {
-        //        // Get full file path 
-        //        string filePath = activeDocument.FullName;
-
-        //        // Get the project item associated with the active document
-        //        ProjectItem projectItem = activeDocument?.ProjectItem;
-
-        //        // Project File List
-        //        List<string> listFilesProject = new List<string>();
-
-        //        var optionsPage = (OptionsPage)this._package.GetDialogPage(typeof(OptionsPage));
-
-        //        bool includeReferencedProjectsFromSolution = optionsPage.IncludeReferencedProjectsFromSolution;
-
-        //        // Obtener el proyecto al que pertenece el documento activo
-        //        EnvDTE.Project project = projectItem?.ContainingProject;
-
-        //        if (project != null)
-        //        {
-        //            // Enumerar archivos del proyecto actual
-        //            EnumerateFiles(project.ProjectItems, listFilesProject);
-
-        //            if (includeReferencedProjectsFromSolution)
-        //            {
-        //                // List files from referenced projects
-        //                EnumerateProjectReferences(project, listFilesProject);
-        //            }
-        //        }
-
-        //        // Read file content
-        //        var fileContent = File.ReadAllText(filePath);
-
-        //        // Create a syntax tree
-        //        var syntaxTree = CSharpSyntaxTree.ParseText(fileContent);
-
-        //        // Get root of tree of syntax
-        //        var root = syntaxTree.GetRoot() as CompilationUnitSyntax;
-
-        //        if (root == null)
-        //        {
-        //            VsShellUtilities.ShowMessageBox(
-        //                this._package,
-        //                "No root found in the syntax tree.",
-        //                "Method Name",
-        //                OLEMSGICON.OLEMSGICON_WARNING,
-        //                OLEMSGBUTTON.OLEMSGBUTTON_OK,
-        //                OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
-        //            return;
-        //        }
-
-        //        // Get the cursor position
-        //        var cursorPosition = textSelection.ActivePoint.AbsoluteCharOffset;
-
-        //        // Find the method that contains the cursor position
-        //        var methodNode = root.DescendantNodes()
-        //            .OfType<MethodDeclarationSyntax>()
-        //            .FirstOrDefault(m => m.Span.Contains(cursorPosition));
-
-        //        if (methodNode != null)
-        //        {
-        //            // Method name
-        //            string methodName = methodNode.Identifier.Text;
-
-        //            // Containing class
-        //            var classNode = methodNode.Ancestors()
-        //                .OfType<ClassDeclarationSyntax>()
-        //                .FirstOrDefault();
-        //            string className = classNode?.Identifier.Text;
-
-        //            // Name space
-        //            var namespaceNode = classNode?.Ancestors()
-        //                .OfType<NamespaceDeclarationSyntax>()
-        //                .FirstOrDefault();
-        //            string namespaceName = namespaceNode?.Name.ToString();
-
-        //            AnalyzeCode.Converter converter = new AnalyzeCode.Converter();
-
-        //            string baseDirectory = optionsPage.BaseDirectory;
-        //            int maxDeep = optionsPage.MaxDeep;
-        //            FormatPlantUmlOutputDiagram formatPlantUmlOutputDiagram = optionsPage.FormatPlantUmlOutputDiagram;
-        //            string fullPathPlantUmlJar = optionsPage.FullPathPlantUmlJar;
-        //            bool visualizePlantUml = formatPlantUmlOutputDiagram != FormatPlantUmlOutputDiagram.None;
-        //            Encoding encodingPlantUmlTextFile = optionsPage.EncodingPlantUmlTextFile;
-        //            int plantUmlLimitSize = optionsPage.PlantUmlLimitSize;
-        //            int dpi = optionsPage.Dpi;
-
-        //            if (maxDeep < 1)
-        //            {
-        //                VsShellUtilities.ShowMessageBox(
-        //                    this._package,
-        //                    "The Maximum Deep must be greater than 0.",
-        //                    "Current Method Information",
-        //                    OLEMSGICON.OLEMSGICON_WARNING,
-        //                    OLEMSGBUTTON.OLEMSGBUTTON_OK,
-        //                    OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
-        //                return;
-        //            }
-
-        //            if (plantUmlLimitSize < 200)
-        //            {
-        //                VsShellUtilities.ShowMessageBox(
-        //                    this._package,
-        //                    "The PlantUML Limit Size must be greater than 200.",
-        //                    "Current Method Information",
-        //                    OLEMSGICON.OLEMSGICON_WARNING,
-        //                    OLEMSGBUTTON.OLEMSGBUTTON_OK,
-        //                    OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
-        //                return;
-        //            }
-
-        //            if (dpi < 50)
-        //            {
-        //                VsShellUtilities.ShowMessageBox(
-        //                    this._package,
-        //                    "The DPI size must be greater than 50.",
-        //                    "Current Method Information",
-        //                    OLEMSGICON.OLEMSGICON_WARNING,
-        //                    OLEMSGBUTTON.OLEMSGBUTTON_OK,
-        //                    OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
-        //                return;
-        //            }
-
-        //            FormatPlantUmlOutput formatPlantUmlOutput = ConvertToFormatPlantUmlOutput(formatPlantUmlOutputDiagram);
-
-        //            if (visualizePlantUml && string.IsNullOrEmpty(fullPathPlantUmlJar))
-        //            {
-        //                VsShellUtilities.ShowMessageBox(
-        //                    this._package,
-        //                    "The full path to the PlantUML JAR file has not been specified.",
-        //                    "Current Method Information",
-        //                    OLEMSGICON.OLEMSGICON_WARNING,
-        //                    OLEMSGBUTTON.OLEMSGBUTTON_OK,
-        //                    OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
-        //                return;
-        //            }
-
-        //            var plantUml = converter.Convert(maxDeep, listFilesProject, filePath, namespaceName, className, methodName, directoryBaseOutput: baseDirectory,
-        //                visualizePlantUml: visualizePlantUml, fullPathPlantUmlJar: fullPathPlantUmlJar,
-        //                formatPlantUmlOutput: formatPlantUmlOutput,
-        //                encodingPlantUmlTextFile: encodingPlantUmlTextFile,
-        //                plantUmlLimitSize: plantUmlLimitSize,
-        //                dpi: dpi);
-        //            Console.WriteLine(plantUml);
-        //        }
-        //        else
-        //        {
-        //            VsShellUtilities.ShowMessageBox(
-        //                this._package,
-        //                "No se encontró un método en la posición actual del cursor.",
-        //                "Información del Método Actual",
-        //                OLEMSGICON.OLEMSGICON_WARNING,
-        //                OLEMSGBUTTON.OLEMSGBUTTON_OK,
-        //                OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
-        //        }
-        //    }
-        //    else
-        //    {
-        //        VsShellUtilities.ShowMessageBox(
-        //            this._package,
-        //            "No method found at the current cursor position.",
-        //            "Method Name",
-        //            OLEMSGICON.OLEMSGICON_WARNING,
-        //            OLEMSGBUTTON.OLEMSGBUTTON_OK,
-        //            OLEMSGDEFBUTTON.OLEMSGDEFBUTTON_FIRST);
-        //    }
-        //}
-
+        
         /// <summary>
         /// Converts from FormatPlantUmlOutputDiagram to FormatPlantUmlOutput
         /// </summary>

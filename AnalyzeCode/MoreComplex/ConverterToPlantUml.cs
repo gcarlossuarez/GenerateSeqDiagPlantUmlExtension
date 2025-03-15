@@ -25,6 +25,9 @@ namespace AnalyzeCode.MoreComplex
         {
             var stringBuilder = new StringBuilder();
             stringBuilder.AppendLine("@startuml");
+            stringBuilder.AppendLine(@"skinparam sequence {
+    LifeLineBackgroundColor lightblue
+}");
 
             if (specifyDpi300)
             {

@@ -119,5 +119,45 @@ namespace TestTryCatch
             }
             Console.WriteLine("Inside ClassA.CallTest8. Outside of try-catch");
         }
+
+        public void CallATest9()
+        {
+            try
+            {
+                ClassB classB = new ClassB();
+                classB.CallBTest9();
+            }
+            catch (MyException e)
+            {
+                Console.WriteLine("MyException:" + e.Message);
+                throw new MyException(e.Message);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
+            Console.WriteLine("Inside ClassA.CallTest8. Outside of try-catch");
+        }
+
+        public void CallATest10()
+        {
+            try
+            {
+                ClassB classB = new ClassB();
+                classB.CallBTest10();
+            }
+            catch (MyException e)
+            {
+                Console.WriteLine("MyException:" + e.Message);
+                throw ;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                throw;
+            }
+            Console.WriteLine("Inside ClassA.CallTest8. Outside of try-catch");
+        }
     }
 }

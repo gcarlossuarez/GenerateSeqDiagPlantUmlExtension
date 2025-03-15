@@ -83,6 +83,50 @@ namespace Test
                 Console.WriteLine("Ending TestGenerator.InitTest8");
             }
         }
+
+        public void InitTest9()
+        {
+            try
+            {
+                Console.WriteLine("Initializing...");
+                ClassA classA = new ClassA();
+                classA.CallATest9();
+            }
+            catch (MyException e)
+            {
+                Console.WriteLine("MyException:" + e.Message);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
+            finally
+            {
+                Console.WriteLine("Ending TestGenerator.InitTest9");
+            }
+        }
+
+        public void InitTest10()
+        {
+            try
+            {
+                Console.WriteLine("Initializing...");
+                ClassA classA = new ClassA();
+                classA.CallATest10();
+            }
+            catch (MyException e)
+            {
+                Console.WriteLine("MyException:" + e.Message);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
+            finally
+            {
+                Console.WriteLine("Ending TestGenerator.InitTest10");
+            }
+        }
     }
 }
 

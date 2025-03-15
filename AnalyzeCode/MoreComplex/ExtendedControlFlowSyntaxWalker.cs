@@ -31,6 +31,7 @@ namespace AnalyzeCode.MoreComplex
     /// </summary>
     public class ExtendedControlFlowSyntaxWalker : CSharpSyntaxWalker
     {
+        private const string ACTOR = "Actor";
         private const string UNKNOWN = "UNKNOWN";
         private const string UNRESOLVED = "[UNRESOLVED]";
 
@@ -194,10 +195,11 @@ namespace AnalyzeCode.MoreComplex
                 caller = className;
                 Actions.Add(new StringToken($"{ACTIVATE}{className}"));
                 string methodSignature = methodName + "(" + string.Join(", ", parametersList) + ")";
-                string initialFlow = $"Actor {ARROW} {className} : {FormaterStr.DeleteEnterAndCarriageReturnCharacters(methodSignature)}";
+                
+                string initialFlow = $"{ACTOR} {ARROW} {className} : {FormaterStr.DeleteEnterAndCarriageReturnCharacters(methodSignature)}";
                 //Actions.Add(new StringToken(initialFlow));
                 CommonTokenType commonTokenType = new CommonTokenType(
-                    "Actor", className, ARROW, $"{FormaterStr.DeleteEnterAndCarriageReturnCharacters(methodSignature)}");
+                    $"{ACTOR}", className, ARROW, $"{FormaterStr.DeleteEnterAndCarriageReturnCharacters(methodSignature)}");
                 Actions.Add(new ComplexToken(commonTokenType));
             }
 
@@ -2346,7 +2348,34 @@ namespace AnalyzeCode.MoreComplex
                 }
                 else
                 {
-                    catchType = UNKNOWN;
+                    // It tries to find the type if the exception was thrown, simply using "throw", without Type specification
+                    // Example:
+                    // catch(MyException e)
+                    // {
+                    //      throw;
+                    // }
+                    catchType = string.Empty;
+                    var ancestors = node.Ancestors();
+                    foreach (var ancestor in ancestors)
+                    {
+                        if (ancestor is CatchClauseSyntax catchClauseSyntax)
+                        {
+                            catchType = catchClauseSyntax?.Declaration?.Type?.ToFullString().Trim();
+                            break;
+                        }
+                        
+                        if (ancestor is TryStatementSyntax || ancestor is MethodDeclarationSyntax)
+                        {
+                            // There is no catch declaration
+                            catchType = UNKNOWN;
+                            break;
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(catchType))
+                    {
+                        catchType = UNKNOWN;
+                    }
                 }
 
                 // Check if the exception expression is an object creation (new Exception(...))
@@ -2365,10 +2394,32 @@ namespace AnalyzeCode.MoreComplex
                 {
                     foreach (var catchClauseSyntax in tuple.Item2.Catches)
                     {
+                        bool isTheSameCatchThatThrowExceptionItMustBePropagated = false;
                         if (catchClauseSyntax.Declaration is null // Exception without declaration, catch anything
                             || catchClauseSyntax.Declaration.Type.ToFullString().Trim() == catchType
                             || catchClauseSyntax.Declaration.Type.ToFullString().Trim() == GENERAL_EXCEPTION) // General Exception, catch anything
                         {
+                            foreach (var ancestor in node.Ancestors())
+                            {
+                                if (ancestor is CatchClauseSyntax catchClauseSyntax2)
+                                {
+                                    if (catchClauseSyntax == catchClauseSyntax2)
+                                    {
+                                        isTheSameCatchThatThrowExceptionItMustBePropagated = true;
+                                    }
+
+                                    break;
+                                }
+
+                                if (ancestor is TryStatementSyntax || ancestor is MethodDeclarationSyntax)
+                                {
+                                    // There is no catch declaration
+                                    break;
+                                }
+                            }
+
+                            if (isTheSameCatchThatThrowExceptionItMustBePropagated) break;
+
                             found = true;
                             string callerTarget = string.Empty;
 
@@ -2400,12 +2451,6 @@ namespace AnalyzeCode.MoreComplex
                                 $"<font color=red>throw {catchType}{parametersFormattedStr}");
                             Actions.Add(new ComplexToken(commonTokenType));
 
-                            //if (needsRethrow)
-                            //{
-                            //    _rethrownExceptionsStack.Push(Tuple.Create(catchClauseSyntax, callerSource));
-                            //    VisitCatchClause(catchClauseSyntax);
-                            //    _rethrownExceptionsStack.Pop();
-                            //}
                             break;
                         }
                     }
@@ -2418,8 +2463,8 @@ namespace AnalyzeCode.MoreComplex
 
                 if (!found)
                 {
-                    // No catch found for the exception thrown, so we must bue register the process cancelation.
-                    string callerTarget = GetCallerNotUsingStackInvocationExpression(_initialMethodDeclarationSyntax);
+                    // No catch found for the exception thrown, so we must be register the process cancelation.
+                    string callerTarget = ACTOR;
                     string callerSource = _rethrownExceptionsStack.Any()
                         ? _rethrownExceptionsStack.Peek().Item2
                         : invocationExpressionSyntaxesSource.Item2;

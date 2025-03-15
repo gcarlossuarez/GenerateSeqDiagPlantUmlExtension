@@ -11,6 +11,7 @@ using AnalyzeCode.MoreComplex;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using WorkWithDVgCollapsing;
 
 namespace AnalyzeCode
 {
@@ -47,6 +48,7 @@ namespace AnalyzeCode
         /// <param name="encodingPlantUmlTextFile"></param>
         /// <param name="plantUmlLimitSize"></param>
         /// <param name="dpi"></param>
+        /// <param name="collapseNodesInSvg"></param>
         /// <returns></returns>
         /// <exception cref="Exception"></exception>
         public string Convert(int maxDeep, List<string> listFilesProject, string fullPathSourceCode, string namespaceName,
@@ -54,7 +56,8 @@ namespace AnalyzeCode
             string fullPathPlantUmlJar, FormatPlantUmlOutput formatPlantUmlOutput = FormatPlantUmlOutput.None,
             Encoding encodingPlantUmlTextFile = null,
             int plantUmlLimitSize = 8192,
-            int dpi = 300)
+            int dpi = 300,
+            bool collapseNodesInSvg = true)
         {
             var listCSharpFiles = listFilesProject.Where(f => new FileInfo(f).Extension.Trim().ToLower() == ".cs")
                 .ToList();
@@ -84,7 +87,7 @@ namespace AnalyzeCode
             if (visualizePlantUml)
             {
                 VisualizePlantUml(directoryBaseOutput, plantUmlSpecification, formatPlantUmlOutput, fullPathPlantUmlJar,
-                    encodingPlantUmlTextFile, plantUmlLimitSize, dpi);
+                    encodingPlantUmlTextFile, plantUmlLimitSize, dpi, collapseNodesInSvg);
             }
             else
             {
@@ -169,11 +172,13 @@ namespace AnalyzeCode
         /// <param name="encodingPlantUmlTextFile"></param>
         /// <param name="plantUmlLimitSize"></param>
         /// <param name="dpi"></param>
+        /// <param name="collapseNodesInSvg"></param>
         private void VisualizePlantUml(string directoryBaseOutput, string plantUmlSpecification,
             FormatPlantUmlOutput formatPlantUmlOutput, string plantUmlJarFullPath,
             Encoding encodingPlantUmlTextFile = null,
             int plantUmlLimitSize = 8192,
-            int dpi = 300)
+            int dpi = 300, 
+            bool collapseNodesInSvg = true)
         {
             const string logFileName = "log_file.txt";
             // Get the output directory
@@ -250,30 +255,6 @@ namespace AnalyzeCode
             };
 
             bool success = false;
-
-            // Run the process
-            //using (Process process = new Process())
-            //{
-            //    process.StartInfo = processInfo;
-            //    process.Start();
-            //    process.WaitForExit();
-
-            //    // Read output and errors (optional, for debugging)
-            //    string output = process.StandardOutput.ReadToEnd();
-            //    string error = process.StandardError.ReadToEnd();
-
-            //    if (process.ExitCode == 0)
-            //    {
-            //        Console.WriteLine("Diagram generated successfully.");
-            //        Console.WriteLine("Output: " + output);
-            //        success = true;
-            //    }
-            //    else
-            //    {
-            //        Console.WriteLine("Error generating diagram.");
-            //        Console.WriteLine("Error: " + error);
-            //    }
-            //}
             
             File.AppendAllText(logFilePath, $"Java Path: {processInfo.FileName}\n");
             File.AppendAllText(logFilePath, $"PlantUML JAR: {plantUmlJarFullPath}\n");
@@ -304,6 +285,12 @@ namespace AnalyzeCode
 
             if (success)
             {
+                if (formatPlantUmlOutput == FormatPlantUmlOutput.Svg && collapseNodesInSvg)
+                {
+                    string inputFile = outputFilePath;
+                    outputFilePath = WorkWithDVgCollapsing.SvgFormatter20.Format(inputFile);
+                }
+
                 // Open the PlantUml File Formatted
                 OpenFileWithDefaultProgram(outputFilePath);
 
@@ -324,83 +311,7 @@ namespace AnalyzeCode
             return outputDirectory;
         }
 
-        //private void VisualizePlantUml(string plantUmlSpecification, FormatPlantUmlOutput formatPlantUmlOutput,
-        //    string plantUmlJarFullPath)
-        //{
-        //    if (formatPlantUmlOutput == FormatPlantUmlOutput.None) return;
-
-        //    string outputDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Output");
-        //    if (!Directory.Exists(outputDirectory)) Directory.CreateDirectory(outputDirectory);
-
-        //    // Path to the text file with the diagram
-        //    string inputFilePath = Path.Combine(outputDirectory, "diagram.puml");
-
-        //    // Write the PlantUML specification to the file
-        //    File.WriteAllText(inputFilePath, plantUmlSpecification);
-
-        //    // Copy the PlantUml specification in a common txt file
-        //    string inputFilePathTxt = Path.Combine(outputDirectory, "diagram.txt");
-        //    File.WriteAllText(inputFilePathTxt, plantUmlSpecification);
-
-        //    // Output path for the image or SVG
-        //    string outputFilePath =
-        //        formatPlantUmlOutput == FormatPlantUmlOutput.Png
-        //            ? Path.Combine(outputDirectory, "diagram.png")
-        //            : Path.Combine(outputDirectory, "diagram.svg");
-
-        //    // Command to run PlantUML
-        //    string javaArguments = $"-jar \"{plantUmlJarFullPath}\" \"{inputFilePath}\"";
-
-        //    javaArguments += $" -o \"{outputDirectory}\"";
-
-
-        //    // Configurar el proceso
-        //    ProcessStartInfo processInfo = new ProcessStartInfo
-        //    {
-        //        FileName = "java",
-        //        Arguments = javaArguments,
-        //        RedirectStandardOutput = true,
-        //        RedirectStandardError = true,
-        //        UseShellExecute = false,
-        //        CreateNoWindow = true
-        //    };
-
-        //    bool success = false;
-
-        //    // Run the process
-        //    using (Process process = new Process())
-        //    {
-        //        process.StartInfo = processInfo;
-        //        process.Start();
-        //        process.WaitForExit();
-
-        //        // Read output and errors (optional, for debugging)
-        //        string output = process.StandardOutput.ReadToEnd();
-        //        string error = process.StandardError.ReadToEnd();
-
-        //        if (process.ExitCode == 0)
-        //        {
-        //            Console.WriteLine("Diagram generated successfully.");
-        //            Console.WriteLine("Output: " + output);
-        //            success = true;
-        //        }
-        //        else
-        //        {
-        //            Console.WriteLine("Error generating diagram.");
-        //            Console.WriteLine("Error: " + error);
-        //        }
-        //    }
-
-        //    if (success)
-        //    {
-        //        // Open the PlantUml File Formatted
-        //        OpenFileWithDefaultProgram(outputFilePath);
-
-        //        // Open the file text with PlantUml specification
-        //        OpenFileWithDefaultProgram(inputFilePathTxt);
-        //    }
-        //}
-
+        
         /// <summary>
         /// Method that opens a file with the default program
         /// </summary>

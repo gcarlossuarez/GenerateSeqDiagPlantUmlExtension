@@ -1,13 +1,17 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.12.35707.178 d17.12
+VisualStudioVersion = 17.12.35707.178
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GenerateSeqDiagPlantUmlExtension", "..\GenerateSeqDiagPlantUmlExtension\GenerateSeqDiagPlantUmlExtension.csproj", "{A885C972-5F4A-4260-BA7A-9716EA0685AD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AnalyzeCode", "..\AnalyzeCode\AnalyzeCode.csproj", "{A81014DD-986B-41BD-97DA-E230BF87481C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestConsoleAnalyzeCode", "..\TestConsoleAnalyzeCode\TestConsoleAnalyzeCode.csproj", "{77A96720-E6DF-4CA9-939C-B100AFA0A734}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorkWithDVgCollapsing", "..\WorkWithDVgCollapsing\WorkWithDVgCollapsing\WorkWithDVgCollapsing.csproj", "{EAF580BD-099D-4527-9245-44EF69BD64E1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestWorkWithDvgCollapsing", "..\TestWorkWithDvgCollapsing\TestWorkWithDvgCollapsing.csproj", "{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -55,8 +59,35 @@ Global
 		{77A96720-E6DF-4CA9-939C-B100AFA0A734}.Release|arm64.Build.0 = Release|Any CPU
 		{77A96720-E6DF-4CA9-939C-B100AFA0A734}.Release|x86.ActiveCfg = Release|Any CPU
 		{77A96720-E6DF-4CA9-939C-B100AFA0A734}.Release|x86.Build.0 = Release|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Debug|arm64.ActiveCfg = Debug|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Debug|arm64.Build.0 = Debug|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Debug|x86.Build.0 = Debug|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Release|arm64.ActiveCfg = Release|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Release|arm64.Build.0 = Release|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Release|x86.ActiveCfg = Release|Any CPU
+		{EAF580BD-099D-4527-9245-44EF69BD64E1}.Release|x86.Build.0 = Release|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Debug|arm64.ActiveCfg = Debug|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Debug|arm64.Build.0 = Debug|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Debug|x86.Build.0 = Debug|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Release|Any CPU.Build.0 = Release|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Release|arm64.ActiveCfg = Release|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Release|arm64.Build.0 = Release|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Release|x86.ActiveCfg = Release|Any CPU
+		{89A0BDA8-A574-41BE-A2DF-67FFB35DC919}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {103DF752-4BE6-45E9-8BA0-C86243C58968}
 	EndGlobalSection
 EndGlobal

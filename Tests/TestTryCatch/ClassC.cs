@@ -57,5 +57,17 @@ namespace TestTryCatch
             if (b) throw new MyException("MyException was thrown");
             //throw new Exception("Error in ClassC.CallCTest1");
         }
+
+        public void CallCTest9(bool b)
+        {
+            if (b) throw new MyException("MyException was thrown");
+            //throw new Exception("Error in ClassC.CallCTest1");
+        }
+
+        public void CallCTest10(bool b)
+        {
+            if (b) throw new MyException("MyException was thrown");
+            //throw new Exception("Error in ClassC.CallCTest1");
+        }
     }
 }
