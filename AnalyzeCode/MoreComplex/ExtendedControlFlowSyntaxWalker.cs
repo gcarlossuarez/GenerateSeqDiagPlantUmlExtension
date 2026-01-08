@@ -195,11 +195,12 @@ namespace AnalyzeCode.MoreComplex
                 caller = className;
                 Actions.Add(new StringToken($"{ACTIVATE}{className}"));
                 string methodSignature = methodName + "(" + string.Join(", ", parametersList) + ")";
-                
-                string initialFlow = $"{ACTOR} {ARROW} {className} : {FormaterStr.DeleteEnterAndCarriageReturnCharacters(methodSignature)}";
-                //Actions.Add(new StringToken(initialFlow));
-                CommonTokenType commonTokenType = new CommonTokenType(
-                    $"{ACTOR}", className, ARROW, $"{FormaterStr.DeleteEnterAndCarriageReturnCharacters(methodSignature)}");
+		string initialFlow = $"{ACTOR} {ARROW} {className} : {FormaterStr.DeleteEnterAndCarriageReturnCharacters(methodSignature)}";
+		//Actions.Add(new StringToken(initialFlow));
+
+		CommonTokenType commonTokenType = new CommonTokenType(
+    			$"{ACTOR}", className, ARROW, $"{FormaterStr.DeleteEnterAndCarriageReturnCharacters(methodSignature)}");
+
                 Actions.Add(new ComplexToken(commonTokenType));
             }
 

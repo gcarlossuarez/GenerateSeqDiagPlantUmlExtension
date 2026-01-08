@@ -39,3 +39,7 @@ Demos/
 TestConsoleAnalyzeCode/
 GenerateSeqDiagPlantUmlExtension/Docs/Private/
 Utils/
+
+# Diagramas generados automáticamente
+*.diagram
+
